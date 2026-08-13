@@ -1,0 +1,6 @@
+version: 1
+pair:
+  english: README.md
+  chinese: README.zh.md
+  scope: full-file
+  note: Both files describe the same community edition, source-run workflow, privacy policy, attribution, and license.

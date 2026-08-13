@@ -1,0 +1,32 @@
+- banner:
+  - navigation "Session hierarchy":
+    - button "Ask a research subagent to"
+    - text: /
+    - button "event-sourcing researcher" [disabled]
+  - img
+  - text: Standard mode
+  - button "Session log":
+    - text: Session log
+    - img
+  - tablist:
+    - tab "Chat" [selected]
+    - tab "Trajectory"
+- text: Explain event sourcing in one sentence. {{clock}}
+- button "Copy":
+  - img
+- group:
+  - status: Deep diving...
+  - log "Run activity":
+    - text: Clarify the goal
+    - region "Stage result":
+      - text: Stage result
+      - paragraph: partial
+  - group:
+    - img
+    - text: Run details
+- textbox "Parent session offline; sending is unavailable but you can still stop the run" [disabled]
+- button "Commands" [disabled]:
+  - img
+- 'button "Access mode, current: Custom" [disabled]': Custom
+- button "Stop generating"
+- button "Send message" [disabled]

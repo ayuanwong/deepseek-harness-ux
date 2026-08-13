@@ -1,0 +1,89 @@
+/* Shared message IconActions row (user + assistant). Parent modules own
+   layout offsets via the composed className. */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+}
+
+/* Clock before icons (user figma 388:20051) / after (assistant 43:32997). */
+.timeStart {
+  padding-right: 12px;
+  font-size: 14px;
+  line-height: 24px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+.timeEnd {
+  padding-left: 12px;
+  font-size: 14px;
+  line-height: 24px;
+  color: var(--dsw-alias-label-tertiary);
+  white-space: nowrap;
+}
+
+/* Separator between the clock and the run-time label (time · Ran for 15s). */
+.runTimeDot {
+  margin: 0 10px;
+}
+
+/* Message containers opt in with data-time-hover-root: the complete metadata
+   and action strip appears only when the message is hovered or contains
+   keyboard focus. Opacity keeps the transcript from jumping; pointer-events
+   keeps an invisible strip from intercepting the message. Touch devices have
+   no hover, so their controls remain available. */
+@media (hover: hover) {
+  [data-time-hover-root] [data-message-actions] {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 80ms ease;
+  }
+
+  [data-time-hover-root]:hover [data-message-actions],
+  [data-time-hover-root]:focus-within [data-message-actions] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 6px;
+  border: none;
+  border-radius: 28px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.action:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Unavailable stays focusable and hoverable so Tooltip can explain why. */
+.action[data-unavailable] {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.action[data-unavailable]:hover {
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
