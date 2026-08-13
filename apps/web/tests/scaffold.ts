@@ -415,9 +415,9 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
     // workspace, keeping the composition untouched.
     { id: 'agent-instructions', disabled: true },
     { id: 'session-title-llm', disabled: true },
-    // Presentation refinement is deliberately off in keyless replay lanes.
-    // Dedicated composition tests cover its LLM boundary without introducing
-    // an ambient model call into deterministic Web fixtures.
+    // Presentation refinement is deliberately off in deterministic Web
+    // fixtures (record and replay). Dedicated composition tests cover its LLM
+    // boundary without introducing an ambient display call into Agent scripts.
     { id: 'web-presentation', disabled: true },
     // Fixture sessions must never leave the process: the shipped row defaults
     // to the production OTLP endpoint (or whatever DSH_TELEMETRY_OTLP_URL

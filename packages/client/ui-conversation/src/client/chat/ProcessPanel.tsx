@@ -100,7 +100,7 @@ function RunningClock({ startTime, t }: {
  * stateful Tool rows when a running call settles.
  */
 export function ProcessPanel({
-  state, count, runMs, startTime, title, lines, trailSource = 'local', result, children, t,
+  state, count, runMs, startTime, title, lines, trailSource = 'local', result, resultKind, children, t,
 }: {
   state: 'running' | 'done' | 'warning'
   count: number
@@ -112,10 +112,13 @@ export function ProcessPanel({
   trailSource?: 'local' | 'refined' | undefined
   /** User-facing mid-turn narration that must remain readable while work is paused for input. */
   result?: ReactNode | undefined
+  /** Candidate answer stays visually separate; later activity promotes it to an intermediate result in place. */
+  resultKind?: 'candidate' | 'intermediate' | undefined
   children: ReactNode
   t: ChatViewSlotProps['t']
 }) {
   const running = state === 'running'
+  const showSemantic = state !== 'done'
   const activity = lines ?? []
   const [stageTrail, setStageTrail] = useState<readonly ProcessStage[]>(
     () => mergeProcessStages([], activity),
@@ -130,13 +133,20 @@ export function ProcessPanel({
       setStageTrail(mergeProcessStages([], activity))
       return
     }
+    // Sidecar lines carry the complete accepted semantic timeline plus any
+    // newer explicit Tool/Todo fact. Rebuild that small timeline so a refined
+    // title replaces its provisional local wording instead of duplicating it.
+    if (trailSource === 'refined') {
+      setStageTrail(mergeProcessStages([], activity))
+      return
+    }
     setStageTrail(previous => mergeProcessStages(previous, activity))
   }, [activity, trailSource])
   const visibleStages = stageTrail.slice(-4)
   const current = visibleStages.at(-1)
   const earlier = visibleStages.slice(0, -1)
   const hasResult = result !== null && result !== undefined
-  const focusTitle = current?.summary ?? title ?? (hasResult ? null : t('chat.activity.starting'))
+  const focusTitle = current?.summary ?? title ?? null
   const keepRunningOpen = (event: SyntheticEvent<HTMLDetailsElement>): void => {
     if (running && !event.currentTarget.open) event.currentTarget.open = true
   }
@@ -169,7 +179,7 @@ export function ProcessPanel({
         <span className={css.rule} aria-hidden />
       </summary>
       <div className={css.body}>
-        {running && (
+        {showSemantic && (
           <div className={css.semantic}>
             {earlier.length > 0 && (
               <ol className={css.stageTrail} aria-label={t('chat.process.previousStages')}>
@@ -181,32 +191,40 @@ export function ProcessPanel({
                 ))}
               </ol>
             )}
-            <div
-              className={css.stageFocus}
-              role="log"
-              aria-label={t('chat.activity.log')}
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              <div className={css.focusLine}>
-                <StateDot
-                  state={current?.state === 'warning' ? 'warning' : 'ongoing'}
-                  size={8}
-                />
-                {current?.state === 'warning' && (
-                  <span className={a11yCss.visuallyHidden}>{t('chat.process.warning')}</span>
-                )}
-                {focusTitle !== null && (
+            {focusTitle !== null && (
+              <div
+                className={css.stageFocus}
+                role="log"
+                aria-label={t('chat.activity.log')}
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                <div className={css.focusLine}>
+                  <StateDot
+                    state={current?.state === 'warning' ? 'warning' : 'ongoing'}
+                    size={8}
+                  />
+                  {current?.state === 'warning' && (
+                    <span className={a11yCss.visuallyHidden}>{t('chat.process.warning')}</span>
+                  )}
                   <div className={css.runningTitle} data-process-stage-title="">{focusTitle}</div>
-                )}
-              </div>
-              {hasResult && (
-                <div className={css.stageResult} data-process-result="" role="region" aria-label={t('chat.process.result')}>
-                  <div className={css.resultLabel}>{t('chat.process.result')}</div>
-                  <div className={css.resultBody}>{result}</div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+            {hasResult && (
+              <div
+                className={`${css.stageResult} ${resultKind === 'intermediate' ? css.intermediateResult : css.answerCandidate}`}
+                data-process-result=""
+                data-process-result-kind={resultKind ?? 'candidate'}
+                role={resultKind === 'intermediate' ? 'region' : undefined}
+                aria-label={resultKind === 'intermediate' ? t('chat.process.result') : undefined}
+              >
+                {resultKind === 'intermediate' && (
+                  <div className={css.resultLabel}>{t('chat.process.result')}</div>
+                )}
+                <div className={css.resultBody}>{result}</div>
+              </div>
+            )}
           </div>
         )}
         {children !== null && children !== undefined && (

@@ -16,11 +16,8 @@
   - text: "goal Goal created Status: active Objective: Keep the composer context panels aligned Rounds: 0/256 Activation: armed Commands: /goal edit <objective>, /goal pause, /goal clear"
 - group:
   - status: Deep diving...
-  - log "Run activity":
-    - text: Clarify the goal Align the panel widths
-    - region "Stage result":
-      - text: Stage result
-      - paragraph: partial
+  - log "Run activity": Forming an executable approach
+  - paragraph: partial
   - group:
     - img
     - text: Run details

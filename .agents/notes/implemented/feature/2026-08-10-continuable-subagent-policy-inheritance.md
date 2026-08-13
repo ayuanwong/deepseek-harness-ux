@@ -6,7 +6,7 @@ English | [中文](2026-08-10-continuable-subagent-policy-inheritance.zh.md)
 
 ## Problem
 
-The one-shot in-process driver has seeded parent sandbox/approval overrides into its children since the [in-process policy-inheritance decision](2026-07-25-subagent-policy-inheritance.md), but the continuable path never did: `SubagentContinuationManager` materialization applied only child composition and the activation setup registry. The default bundle wires both delegation tools as `backgroundMode: continuable`, so in a default deployment every background child silently fell back to deployment defaults — a parent switched to `danger-full-access` produced children stuck at `workspace-write` whose every out-of-workspace operation raised an approval prompt, and a parent's unattended `'never'` approval stance reverted to prompting (upstream issue #334).
+The one-shot in-process driver has seeded parent sandbox/approval overrides into its children since the [in-process policy-inheritance decision](2026-07-25-subagent-policy-inheritance.md), but the continuable path never did: `SubagentContinuationManager` materialization applied only child composition and the activation setup registry. The default bundle wires both delegation tools as `backgroundMode: continuable`, so in a default deployment every background child silently fell back to deployment defaults — a parent switched to `danger-full-access` produced children stuck at `workspace-write` whose every out-of-workspace operation raised an approval prompt, and a parent's unattended `'never'` approval stance reverted to prompting ([dsh-external/issues#334](https://github.com/dsh-external/issues/issues/334)).
 
 ## Decision
 

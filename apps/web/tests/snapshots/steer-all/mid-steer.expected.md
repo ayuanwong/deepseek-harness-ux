@@ -14,7 +14,7 @@
   - img
 - group:
   - status: Deep diving...
-  - log "Run activity": Clarify the goal
+  - log "Run activity": Forming an executable approach
   - group:
     - img
     - text: Run details

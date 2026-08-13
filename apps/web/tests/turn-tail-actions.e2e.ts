@@ -115,9 +115,14 @@ describe('web e2e: assistant IconActions wait for the turn to end', () => {
     // replay default (30s) leaves no headroom on a slow runner.
     const { settled } = await sendPrompt(120_000)
     // The marker IS the synchronization: the second call is provably parked,
-    // so the first step's message and tool result are already durable.
+    // so the first step's message and tool result are already durable. Assert
+    // the narration at that authoritative event instead of coupling footer
+    // ownership to the Process presentation's selected stage text.
     await expect.poll(() => existsSync(marker), { timeout: 20_000 }).toBe(true)
-    await expect.poll(() => page.getByText(NARRATION, { exact: true }).count(), { timeout: 10_000 }).toBe(1)
+    await expect.poll(() => sessionEvents.some(event => (
+      event.type === 'assistant/message'
+      && event.data.message.content.some(block => block.type === 'text' && block.text === NARRATION)
+    )), { timeout: 10_000 }).toBe(true)
     await expect.poll(
       () => page.getByRole('status').filter({ hasText: 'Deep diving...' }).isVisible(),
       { timeout: 10_000 },

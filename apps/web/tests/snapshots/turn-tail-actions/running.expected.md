@@ -15,12 +15,12 @@
 - tooltip "Copy"
 - group:
   - status: Deep diving...
-  - log "Run activity":
-    - text: Design and implement Print alpha to stdout
-    - region "Stage result":
-      - text: Stage result
-      - paragraph: Reading the workspace now.
-      - paragraph: partial
+  - list "Previous stages":
+    - listitem: Forming an executable approach
+  - log "Run activity": Print alpha to stdout
+  - region "Stage result":
+    - text: Stage result
+    - paragraph: Reading the workspace now.
   - group:
     - img
     - text: Run details

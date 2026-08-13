@@ -10,6 +10,11 @@ import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { ProcessPanel, type ProcessLogLine } from './ProcessPanel.tsx'
 
 const STAGE_TEXT_LIMIT = 52
+const STAGE_METADATA_PREFIX = new RegExp([
+  '^(?:length|word\\s*count|words?|tone|style|format|language|audience|requirements?|constraints?',
+  '|output|genre|setting|characters?|theme|长度|篇幅|字数|语气|风格|格式|语言|受众|要求|限制',
+  '|输出|体裁|类型|背景|人物|主题)\\s*[:：]',
+].join(''), 'iu')
 const QUERY_ECHO_GENERIC_SUFFIX = new RegExp([
   '^(?:中|进行中|现在|当前|开始|继续|任务|请求|问题',
   '|到底(?:是|指)?什么|(?:是|指)什么|what(?:it)?means|now|currently)?$',
@@ -92,19 +97,24 @@ function containsTechnicalPayload(value: string): boolean {
 function semanticStageText(value: string, userQueries: readonly string[]): string | null {
   if (isUserQueryEcho(value, userQueries)) return null
   const title = compactStageText(value)
-  if (title === null || containsTechnicalPayload(title) || isUserQueryEcho(title, userQueries)) return null
+  if (
+    title === null
+    || STAGE_METADATA_PREFIX.test(title)
+    || containsTechnicalPayload(title)
+    || isUserQueryEcho(title, userQueries)
+  ) return null
   return title
 }
 
-function reasoningTitle(value: string, userQueries: readonly string[]): string | null {
-  const segments = value.split(/(?:\r?\n+|(?<=[。！？])\s*|(?<=[.!?])\s+)/u)
-  for (let index = segments.length - 1; index >= 0; index -= 1) {
-    const segment = segments[index]
-    if (segment === undefined) continue
-    const title = semanticStageText(segment, userQueries)
-    if (title !== null) return title
-  }
-  return null
+/** Reject display-sidecar fragments that are answer constraints, not work stages. */
+function refinedStageText(value: string, userQueries: readonly string[]): string | null {
+  const compact = value.replace(/\s+/gu, ' ').trim()
+  if (
+    Array.from(compact).length > STAGE_TEXT_LIMIT
+    || STAGE_METADATA_PREFIX.test(compact)
+    || /(?:…|\.{3}|[（(\[{:：,，;；-])$/u.test(compact)
+  ) return null
+  return semanticStageText(compact, userQueries)
 }
 
 function toolArgsRaw(block: ToolCallBlock): string | undefined {
@@ -143,20 +153,10 @@ function textFromTool(block: ToolCallBlock, userQueries: readonly string[]): str
 interface ProcessHeadline {
   text: string
   priority: ProcessLogLine['priority']
-}
-
-function latestReasoning(nodes: readonly ChatNode[], userQueries: readonly string[]): ProcessHeadline | null {
-  for (let nodeIndex = nodes.length - 1; nodeIndex >= 0; nodeIndex -= 1) {
-    const node = nodes[nodeIndex]
-    if (node?.kind !== 'assistant-step') continue
-    for (let blockIndex = node.data.blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-      const block = node.data.blocks[blockIndex]
-      if (block?.kind !== 'reasoning') continue
-      const text = reasoningTitle(block.text, userQueries)
-      if (text !== null) return { text, priority: 2 }
-    }
-  }
-  return null
+  /** Newest transcript fact represented by this local presentation title. */
+  evidence: number
+  /** Stable client identity for in-flight evidence without a durable Session seq. */
+  activityKey?: string
 }
 
 function latestToolTitle(nodes: readonly ChatNode[], userQueries: readonly string[]): ProcessHeadline | null {
@@ -164,9 +164,46 @@ function latestToolTitle(nodes: readonly ChatNode[], userQueries: readonly strin
     const node = nodes[index]
     if (node?.kind !== 'tool-call') continue
     const text = textFromTool(node.data.root, userQueries)
-    if (text !== null) return { text, priority: 1 }
+    if (text !== null) return { text, priority: 1, evidence: node.anchorSeq, activityKey: node.key }
   }
   return null
+}
+
+/**
+ * Keep the semantic seat useful before the display sidecar returns. This
+ * classifies only the task object; it never copies the request or exposes the
+ * streamed reasoning that the technical disclosure owns.
+ */
+function taskStageFallback(userQueries: readonly string[]): string {
+  const query = userQueries.join(' ').normalize('NFKC').toLocaleLowerCase()
+  const chinese = /[\p{Script=Han}]/u.test(query)
+  const label = (zh: string, en: string): string => chinese ? zh : en
+  const web = /(?:html|网页|网站|web\s*(?:page|site)|landing\s*page)/u.test(query)
+  const story = /(?:故事|小说|叙事|story|narrative)/u.test(query)
+  if (web && story) return label('构思故事网页的视觉与交互', 'Shaping the story page and its interactions')
+  if (web) return label('梳理网页的信息结构与交互', 'Structuring the page and its interactions')
+  if (/(?:游戏|消消乐|关卡|game|level)/u.test(query)) {
+    return label('设计游戏规则与核心体验', 'Designing the game rules and core experience')
+  }
+  if (/(?:pdf|幻灯片|演示文稿|ppt|slides?|文档|报告|document|report)/u.test(query)) {
+    return label('组织内容结构与呈现重点', 'Organizing the content and presentation')
+  }
+  if (/(?:海报|图片|插画|视觉|动效|image|poster|illustration|animation)/u.test(query)) {
+    return label('构思视觉主题与画面层次', 'Shaping the visual theme and hierarchy')
+  }
+  if (/(?:调研|研究|分析|比较|评估|research|analy[sz]e|compare|evaluate)/u.test(query)) {
+    return label('整理关键线索与判断依据', 'Gathering the evidence for a sound judgment')
+  }
+  if (/(?:修复|排查|故障|报错|bug|debug|fix|broken|fail)/u.test(query)) {
+    return label('定位问题成因与修复路径', 'Tracing the problem and its repair path')
+  }
+  if (/(?:实现|开发|代码|组件|功能|build|implement|code|component|feature)/u.test(query)) {
+    return label('确定实现路径与关键约束', 'Defining the implementation path and constraints')
+  }
+  if (/(?:写|创作|文章|故事|文案|write|draft|story|article)/u.test(query)) {
+    return label('组织内容结构与表达重点', 'Organizing the content and its key message')
+  }
+  return label('形成任务的可执行方案', 'Forming an executable approach')
 }
 
 function nextHeadline(
@@ -174,8 +211,12 @@ function nextHeadline(
 ): ProcessHeadline | null {
   const activeTodo = todos.find(item => item.status === 'in_progress')
   const todoText = activeTodo === undefined ? null : semanticStageText(activeTodo.content, userQueries)
-  if (todoText !== null) return { text: todoText, priority: 3 }
-  return latestReasoning(nodes, userQueries) ?? latestToolTitle(nodes, userQueries)
+  if (todoText !== null) return { text: todoText, priority: 3, evidence: Number.MAX_SAFE_INTEGER }
+  // Raw reasoning stays private and remains available under “运行详情”. A
+  // task-object title keeps this seat understandable while the display-only
+  // sidecar is pending or unavailable.
+  return latestToolTitle(nodes, userQueries)
+    ?? { text: taskStageFallback(userQueries), priority: 0, evidence: -1 }
 }
 
 function useStableHeadline(next: ProcessHeadline | null): ProcessHeadline | null {
@@ -203,50 +244,82 @@ function useStableHeadline(next: ProcessHeadline | null): ProcessHeadline | null
 interface RefinedStage {
   readonly key: string
   readonly title: string
+  readonly cursor: number
+  readonly activityKey?: string
+}
+
+interface RefinedStageState {
+  readonly stages: readonly RefinedStage[]
+  /** Explicit Tool/Todo activity represented by the latest accepted decision. */
+  readonly coveredActivityKey: string | null
+}
+
+function stageDistance(left: string, right: string): number {
+  const a = Array.from(left)
+  const b = Array.from(right)
+  const previous = b.map((_, index) => index + 1)
+  for (let row = 0; row < a.length; row += 1) {
+    const current = [row + 1]
+    for (let column = 0; column < b.length; column += 1) {
+      current[column + 1] = a[row] === b[column]
+        ? previous[column] ?? 0
+        : 1 + Math.min(
+          previous[column + 1] ?? 0,
+          current[column] ?? 0,
+          previous[column] ?? 0,
+        )
+    }
+    previous.splice(0, previous.length, ...current)
+  }
+  return previous.at(-1) ?? a.length
+}
+
+function sameStageMeaning(left: string, right: string): boolean {
+  const a = comparisonText(left)
+  const b = comparisonText(right)
+  if (a === b) return true
+  if (Math.min(a.length, b.length) >= 8 && (a.includes(b) || b.includes(a))) return true
+  const longest = Math.max(a.length, b.length)
+  return longest >= 8 && stageDistance(a, b) / longest <= 0.28
 }
 
 function acceptRefinedStage(
   previous: readonly RefinedStage[], result: ProcessStagePresentationResult,
+  userQueries: readonly string[], activityKey?: string,
 ): readonly RefinedStage[] {
   if (result.kind !== 'stage') return previous
-  const identity = comparisonText(result.title)
-  const existing = previous.findIndex(stage => comparisonText(stage.title) === identity)
-  if (existing !== -1) return previous
-  if (result.action === 'replace-current' && previous.length > 0) {
-    const current = previous.at(-1)
-    /* v8 ignore next -- length guard above makes the current stage present. */
-    if (current === undefined) return previous
-    return [...previous.slice(0, -1), { ...current, title: result.title }]
+  const title = refinedStageText(result.title, userQueries)
+  if (title === null) return previous
+  const identity = comparisonText(title)
+  const current = previous.at(-1)
+  const currentIdentity = current === undefined ? '' : comparisonText(current.title)
+  const existing = previous.findIndex(stage => sameStageMeaning(stage.title, title))
+  if (existing !== -1 && existing !== previous.length - 1) return previous
+  const progressiveRewrite = Math.min(identity.length, currentIdentity.length) >= 8
+    && (identity.startsWith(currentIdentity) || currentIdentity.startsWith(identity))
+  if (existing !== -1
+    && existing === previous.length - 1
+    && result.action === 'append'
+    && !progressiveRewrite) return previous
+  if ((result.action === 'replace-current' || progressiveRewrite) && current !== undefined) {
+    return [...previous.slice(0, -1), {
+      ...current, title, cursor: result.cursor,
+      ...(activityKey === undefined ? {} : { activityKey }),
+    }]
   }
-  return [...previous, { key: `refined-stage:${previous.length}`, title: result.title }]
+  return [...previous, {
+    key: `refined-stage:${previous.length}`, title, cursor: result.cursor,
+    ...(activityKey === undefined ? {} : { activityKey }),
+  }]
 }
 
-function useRefinedStages({
-  turn, live, nodes, todos, refine,
-}: {
-  readonly turn: number | null
-  readonly live: boolean
-  readonly nodes: readonly ChatNode[]
-  readonly todos: readonly TodoItem[]
-  readonly refine: ChatViewSlotProps['refineProcessStage']
-}): readonly RefinedStage[] {
-  const [stages, setStages] = useState<readonly RefinedStage[]>([])
-  const stagesRef = useRef<readonly RefinedStage[]>([])
-  const cursorRef = useRef(-1)
-  const inFlightRef = useRef(false)
-  const queuedRef = useRef(false)
-  const timerRef = useRef<number | null>(null)
-  const mountedRef = useRef(true)
-  const turnRef = useRef(turn)
-  const liveRef = useRef(live)
-  const refineRef = useRef(refine)
-  const [revision, setRevision] = useState(0)
-  const activitySignature = useMemo(() => JSON.stringify({
+function processActivitySignature(nodes: readonly ChatNode[], todos: readonly TodoItem[]): string {
+  return JSON.stringify({
     nodes: nodes.map((node) => {
       switch (node.kind) {
         case 'assistant-step':
           return [node.key, node.anchorSeq, node.data.status,
-            node.data.blocks.map(block => block.kind === 'reasoning' || block.kind === 'text'
+            node.data.blocks.map(block => block.kind === 'reasoning'
               ? Math.floor(block.text.length / 320)
               : block.kind)]
         case 'tool-call': {
@@ -258,9 +331,35 @@ function useRefinedStages({
       }
     }),
     todos: todos.map(todo => [todo.status, todo.content]),
-  }), [nodes, todos])
+  })
+}
+
+function useRefinedStages({
+  turn, live, activitySignature, explicitActivityKey, userQueries, refine,
+}: {
+  readonly turn: number | null
+  readonly live: boolean
+  readonly activitySignature: string
+  readonly explicitActivityKey: string | undefined
+  readonly userQueries: readonly string[]
+  readonly refine: ChatViewSlotProps['refineProcessStage']
+}): RefinedStageState {
+  const [stages, setStages] = useState<readonly RefinedStage[]>([])
+  const [coveredActivityKey, setCoveredActivityKey] = useState<string | null>(null)
+  const stagesRef = useRef<readonly RefinedStage[]>([])
+  const cursorRef = useRef(-1)
+  const inFlightRef = useRef(false)
+  const queuedRef = useRef(false)
+  const timerRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
+  const turnRef = useRef(turn)
+  const liveRef = useRef(live)
+  const refineRef = useRef(refine)
+  const explicitActivityKeyRef = useRef(explicitActivityKey)
+  const [revision, setRevision] = useState(0)
   liveRef.current = live
   refineRef.current = refine
+  explicitActivityKeyRef.current = explicitActivityKey
   useEffect(() => {
     mountedRef.current = true
     return () => {
@@ -278,6 +377,7 @@ function useRefinedStages({
       timerRef.current = null
     }
     setStages([])
+    setCoveredActivityKey(null)
   }, [turn])
   useEffect(() => {
     if (!live || turn === null) {
@@ -299,16 +399,30 @@ function useRefinedStages({
       inFlightRef.current = true
       queuedRef.current = false
       const requestedTurn = turn
+      // Associate a decision with the activity that was actually present when
+      // its request started. A Tool arriving while the request is in flight
+      // remains visibly pending until the queued follow-up represents it.
+      const requestedActivityKey = explicitActivityKeyRef.current
       void refineRef.current({
         turn: requestedTurn,
         afterSeq: cursorRef.current,
         acceptedStages: stagesRef.current.map(stage => stage.title),
       }).then((result) => {
         if (!mountedRef.current || turnRef.current !== requestedTurn || result === null) return
-        if (result.cursor !== undefined) {
+        if ((result.kind === 'stage' || result.kind === 'unchanged') && result.cursor !== undefined) {
           cursorRef.current = Math.max(cursorRef.current, result.cursor)
         }
-        const next = acceptRefinedStage(stagesRef.current, result)
+        const next = acceptRefinedStage(
+          stagesRef.current, result, userQueries, requestedActivityKey,
+        )
+        const current = stagesRef.current.at(-1)
+        const validTitle = result.kind === 'stage' ? refinedStageText(result.title, userQueries) : null
+        const coversActivity = result.kind === 'unchanged'
+          || result.kind === 'stage' && validTitle !== null
+            && (next !== stagesRef.current || current !== undefined && sameStageMeaning(current.title, validTitle))
+        if (coversActivity && requestedActivityKey !== undefined) {
+          setCoveredActivityKey(requestedActivityKey)
+        }
         if (next !== stagesRef.current) {
           stagesRef.current = next
           setStages(next)
@@ -320,8 +434,8 @@ function useRefinedStages({
         }
       })
     }, 1_200)
-  }, [activitySignature, live, revision, turn])
-  return stages
+  }, [activitySignature, explicitActivityKey, live, revision, turn, userQueries])
+  return { stages, coveredActivityKey }
 }
 
 function nodeWarning(node: ChatNode): boolean {
@@ -355,16 +469,9 @@ function processLogLines(
   for (const node of nodes) {
     switch (node.kind) {
       case 'assistant-step': {
-        const text = [...node.data.blocks].reverse()
-          .map(block => block.kind === 'reasoning' ? reasoningTitle(block.text, userQueries) : null)
-          .find(value => value !== null)
-        if (typeof text === 'string') {
-          push({
-            key: node.key, text,
-            state: node.data.status === 'running' ? 'active' : node.data.status === 'interrupted' ? 'warning' : 'done',
-            priority: 2,
-          })
-        }
+        // Reasoning stays available in “运行详情”. Promoting its latest sentence
+        // directly into the semantic trail creates visibly unfinished and
+        // backward-moving titles while the block streams.
         break
       }
       case 'tool-call': {
@@ -420,6 +527,41 @@ function resultBlocks(node: ChatNode): readonly AssistantBlock[] {
     : []
 }
 
+interface ProcessNarration {
+  readonly key: string
+  readonly blocks: readonly AssistantBlock[]
+  readonly streaming: boolean
+  readonly kind: 'candidate' | 'intermediate'
+}
+
+/**
+ * Keep the newest visible Assistant prose in one stable output seat. Until a
+ * later Tool/activity arrives it is a candidate closing answer; once later
+ * work exists it becomes an intermediate result without changing position.
+ */
+function latestNarration(nodes: readonly ChatNode[]): ProcessNarration | null {
+  let candidate: ProcessNarration | null = null
+  for (let index = nodes.length - 1; index >= 0; index -= 1) {
+    const node = nodes[index]
+    if (node === undefined) continue
+    const blocks = resultBlocks(node)
+    if (blocks.length === 0 || node.kind !== 'assistant-step') continue
+    const callsTool = node.data.blocks.some(block => block.kind === 'tool-call')
+    const narration: ProcessNarration = {
+      key: node.key,
+      blocks,
+      streaming: node.data.status === 'running',
+      kind: callsTool || index < nodes.length - 1 ? 'intermediate' : 'candidate',
+    }
+    // An explanation that led into a Tool/question is a durable intermediate
+    // result. Do not let a later one-word streaming fragment displace it; that
+    // fragment remains in Run details until it becomes the closing answer.
+    if (narration.kind === 'intermediate') return narration
+    candidate ??= narration
+  }
+  return candidate
+}
+
 function detailBlocks(
   node: ChatNode, live: boolean, closing: boolean,
 ): readonly AssistantBlock[] {
@@ -462,36 +604,64 @@ export const ProcessGroup = memo(function ProcessGroup({
     ? snapshot.chat.nodes.values()
     : snapshot.chat.locations.getTurn(turn))
   const store = useSession(snapshot => snapshot.chat.nodes)
+  const tailKey = closingKey ?? nodeKeys.at(-1)
+  const tailVersion = useSession(snapshot => tailKey === undefined ? null : snapshot.chat.nodes.get(tailKey) ?? null)
   const turnLocation = useSession(snapshot => turn === null ? null : snapshot.chat.timeline.turns.get(turn) ?? null)
   const todos = useProjection('todos') ?? []
   const nodes = useMemo(() => {
     void version
+    void tailVersion
     const keys = closingKey === undefined ? nodeKeys : [...nodeKeys, closingKey]
     return keys
       .map(key => store.get(key) as ChatNode | undefined)
       .filter((node): node is ChatNode => node !== undefined)
-  }, [closingKey, nodeKeys, store, version])
+  }, [closingKey, nodeKeys, store, tailVersion, version])
   const processNodes = closingKey === undefined ? nodes : nodes.filter(node => node.key !== closingKey)
-  const headline = useStableHeadline(useMemo(
+  const proposedHeadline = useMemo(
     () => nextHeadline(processNodes, todos, userQueries),
     [processNodes, todos, userQueries],
-  ))
+  )
+  const headline = useStableHeadline(proposedHeadline)
   const lines = useMemo(
     () => processLogLines(processNodes, headline, userQueries, t),
     [headline, processNodes, t, userQueries],
   )
-  const refinedStages = useRefinedStages({
-    turn, live, nodes: processNodes, todos, refine: refineProcessStage,
+  const activitySignature = useMemo(
+    () => processActivitySignature(processNodes, todos),
+    [processNodes, todos],
+  )
+  const { stages: refinedStages, coveredActivityKey } = useRefinedStages({
+    turn, live, activitySignature, explicitActivityKey: proposedHeadline?.activityKey,
+    userQueries, refine: refineProcessStage,
   })
-  const presentationLines = useMemo<readonly ProcessLogLine[]>(() => refinedStages.length === 0
-    ? lines
-    : refinedStages.map((stage, index) => ({
+  const latestRefinedActivityKey = refinedStages.at(-1)?.activityKey ?? coveredActivityKey
+  const pendingExplicitActivity = headline?.activityKey !== undefined
+    && latestRefinedActivityKey !== headline.activityKey
+  const explicitEvidenceIsNewer = headline?.evidence === Number.MAX_SAFE_INTEGER
+    ? pendingExplicitActivity
+    : pendingExplicitActivity && headline.evidence > (refinedStages.at(-1)?.cursor ?? -1)
+  const explicitAfterRefinement = headline !== null
+    && headline.priority > 0
+    && explicitEvidenceIsNewer
+    && comparisonText(headline.text) !== comparisonText(refinedStages.at(-1)?.title ?? '')
+  const presentationLines = useMemo<readonly ProcessLogLine[]>(() => {
+    if (refinedStages.length === 0) return lines
+    const refined = refinedStages.map((stage, index) => ({
       key: stage.key,
       text: stage.title,
-      state: index === refinedStages.length - 1 ? 'active' : 'done',
-      priority: 3,
+      state: index === refinedStages.length - 1 && !explicitAfterRefinement ? 'active' as const : 'done' as const,
+      priority: 3 as const,
       replaceCurrent: true,
-    })), [lines, refinedStages])
+    }))
+    return explicitAfterRefinement
+      ? [...refined, {
+        key: `explicit-stage:${headline.evidence}:${comparisonText(headline.text)}`,
+        text: headline.text,
+        state: 'active',
+        priority: headline.priority,
+      }]
+      : refined
+  }, [explicitAfterRefinement, headline, lines, refinedStages])
   const warning = nodes.some(nodeWarning)
   const processState = live ? 'running' : warning ? 'warning' : 'done'
   const startTime = turnLocation?.start?.time ?? null
@@ -500,22 +670,15 @@ export const ProcessGroup = memo(function ProcessGroup({
     : Math.max(0, turnLocation.end.time - turnLocation.start.time)
   const count = Math.max(1, turnLocation?.steps.length ?? 0, nodeKeys.length)
 
-  const narration = processNodes.flatMap((node) => {
-    const blocks = resultBlocks(node)
-    return blocks.length === 0 ? [] : [{ key: node.key, blocks, streaming: node.kind === 'assistant-step' && node.data.status === 'running' }]
-  })
-  const result = narration.length === 0 ? undefined : (
-    <>
-      {narration.map(item => (
-        <AssistantMarkdown
-          key={item.key}
-          blocks={item.blocks}
-          streaming={item.streaming}
-          loadImage={loadImage}
-          t={t}
-        />
-      ))}
-    </>
+  const narration = latestNarration(processNodes)
+  const result = narration === null ? undefined : (
+    <AssistantMarkdown
+      key={narration.key}
+      blocks={narration.blocks}
+      streaming={narration.streaming}
+      loadImage={loadImage}
+      t={t}
+    />
   )
 
   const details: ReactNode[] = []
@@ -561,10 +724,11 @@ export const ProcessGroup = memo(function ProcessGroup({
       count={count}
       startTime={startTime}
       runMs={runMs}
-      title={refinedStages.at(-1)?.title ?? headline?.text}
+      title={explicitAfterRefinement ? headline.text : refinedStages.at(-1)?.title ?? headline?.text}
       lines={presentationLines}
       trailSource={refinedStages.length === 0 ? 'local' : 'refined'}
       result={result}
+      resultKind={narration?.kind}
       t={t}
     >
       {details.length === 0 ? null : details}

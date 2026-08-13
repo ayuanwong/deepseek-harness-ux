@@ -49,17 +49,16 @@ async function bench() {
   const runtime = await SlotTestRuntime.create()
   runtime.provide('connection', { api: { settings: {} }, isLoopback: false })
   // The plugin injects both; these specs exercise no settings path.
-  runtime.provide('remote', {
-    $on: () => () => {},
-    webPresentation: {
-      'response-headings': vi.fn(() => Promise.resolve({
-        ok: true as const, value: { kind: 'unchanged' as const },
-      })),
-      'process-stage': vi.fn(() => Promise.resolve({
-        ok: true as const, value: { kind: 'unchanged' as const, cursor: 0 },
-      })),
-    },
-  })
+  runtime.provide('remote', { $on: () => () => {} })
+  const webPresentation = {
+    'response-headings': vi.fn(() => Promise.resolve({
+      ok: true as const, value: { kind: 'unchanged' as const },
+    })),
+    'process-stage': vi.fn(() => Promise.resolve({
+      ok: true as const, value: { kind: 'unchanged' as const, cursor: 0 },
+    })),
+  }
+  runtime.provide('remote.webPresentation', webPresentation)
   runtime.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   const sessionFake = sessionFakeFor()
   await runtime.sessions.add({
@@ -134,7 +133,7 @@ async function bench() {
   return {
     runtime, feature, slots: runtime.slots, entryOf,
     conversationApi, conversationHeaderApi, residentApi, composerApi, chatViewApi, inputApi,
-    sessionFake, layoutFake,
+    sessionFake, layoutFake, webPresentation,
   }
 }
 
@@ -246,6 +245,22 @@ describe('conversation slot inject API', () => {
     injected.openFile('src/a.ts')
     await vi.waitFor(() => {
       expect(b.runtime.workspaces.calls).toContainEqual({ method: 'openPath', args: ['/proj/src/a.ts'] })
+    })
+    await b.runtime.dispose()
+  })
+
+  it('routes optional presentation calls through their nested Remote service', async () => {
+    const b = await bench()
+    const { injected } = b.chatViewApi(ROOT)
+    await expect(injected.refineResponseHeadings('message-1' as never)).resolves.toEqual([])
+    await expect(injected.refineProcessStage({
+      turn: 1, afterSeq: -1, acceptedStages: [],
+    })).resolves.toEqual({ kind: 'unchanged', cursor: 0 })
+    expect(b.webPresentation['response-headings']).toHaveBeenCalledWith({
+      sessionId: ROOT, messageId: 'message-1',
+    })
+    expect(b.webPresentation['process-stage']).toHaveBeenCalledWith({
+      sessionId: ROOT, turn: 1, afterSeq: -1, acceptedStages: [],
     })
     await b.runtime.dispose()
   })

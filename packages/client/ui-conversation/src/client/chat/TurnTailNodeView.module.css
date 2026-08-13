@@ -5,5 +5,6 @@
 }
 
 .actions {
+  align-self: flex-start;
   margin-left: -6px;
 }

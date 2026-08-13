@@ -32,20 +32,20 @@
 
 /* Message containers opt in with data-time-hover-root: the complete metadata
    and action strip appears only when the message is hovered or contains
-   keyboard focus. Opacity keeps the transcript from jumping; pointer-events
-   keeps an invisible strip from intercepting the message. Touch devices have
-   no hover, so their controls remain available. */
+   keyboard focus. Opacity keeps the transcript from jumping. The reserved
+   footer hit area remains pointer-active so entering an individual icon can
+   reveal it; otherwise an opacity-hidden child can never receive the first
+   hover and its turn-tail parent wins hit testing indefinitely. Touch devices
+   have no hover, so their controls remain available. */
 @media (hover: hover) {
   [data-time-hover-root] [data-message-actions] {
     opacity: 0;
-    pointer-events: none;
     transition: opacity 80ms ease;
   }
 
   [data-time-hover-root]:hover [data-message-actions],
   [data-time-hover-root]:focus-within [data-message-actions] {
     opacity: 1;
-    pointer-events: auto;
   }
 }
 

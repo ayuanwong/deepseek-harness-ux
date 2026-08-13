@@ -2715,7 +2715,7 @@ export interface Config {
   readonly maxHeadings: number
   /** Maximum section characters paired with one answer heading. */
   readonly maxSectionCharacters: number
-  /** Maximum source events considered for one running-stage update. */
+  /** Maximum coalesced activity records considered for one running-stage update. */
   readonly maxStageEvents: number
   /** Maximum auxiliary stage calls admitted during one Turn. */
   readonly maxStageCallsPerTurn: number

@@ -18,6 +18,9 @@
 - text: "Interjection: include the word BANANA in your final reply. {{clock}}"
 - button "Copy":
   - img
+- group:
+  - img
+  - text: Process · 2 steps · {{duration}}
 - paragraph: Great, let's move forward. BANANA!
 - button "Copy":
   - img

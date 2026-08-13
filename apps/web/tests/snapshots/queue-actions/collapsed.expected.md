@@ -14,11 +14,8 @@
   - img
 - group:
   - status: Deep diving...
-  - log "Run activity":
-    - text: Clarify the goal
-    - region "Stage result":
-      - text: Stage result
-      - paragraph: partial
+  - log "Run activity": Forming an executable approach
+  - paragraph: partial
   - group:
     - img
     - text: Run details

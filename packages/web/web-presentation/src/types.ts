@@ -49,7 +49,7 @@ export interface ProcessStagePresentationRequest {
   readonly sessionId: SessionId
   /** Open Turn being presented. */
   readonly turn: number
-  /** Latest source cursor already considered by the browser. */
+  /** Latest represented source cursor accepted by the browser. */
   readonly afterSeq: number
   /** Append-only titles already accepted by the presentation state machine. */
   readonly acceptedStages: readonly string[]
@@ -68,8 +68,8 @@ export type ProcessStagePresentationResult =
   }
   | {
     readonly kind: 'unchanged'
-    /** Latest source event inspected, even when no call was needed. */
-    readonly cursor: number
+    /** Latest exact source represented by a validated no-op decision. */
+    readonly cursor?: number
   }
   | {
     readonly kind: 'unavailable'
@@ -82,6 +82,6 @@ export type ProcessStagePresentationResult =
       | 'input-too-large'
       | 'call-budget-reached'
       | 'generation-failed'
-    /** Latest inspected source cursor, when one exists. */
-    readonly cursor?: number
+    /** Unavailable decisions never consume source activity. */
+    readonly cursor?: never
   }

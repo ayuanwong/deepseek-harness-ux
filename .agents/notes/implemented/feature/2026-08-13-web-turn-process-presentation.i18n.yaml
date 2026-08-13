@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-13-web-turn-process-presentation.md
-2026-08-13-web-turn-process-presentation.md: 26ccfbe97ed2e1a2883e1984af2a86eacda66ee7
-2026-08-13-web-turn-process-presentation.zh.md: ae78913547b628657df84e020fa0618de32ce2d0
+2026-08-13-web-turn-process-presentation.md: 333e2fc6b26b4e9ff48c806ac8305ff65be7e331
+2026-08-13-web-turn-process-presentation.zh.md: 70de9bdd54867cb5b335e3f0db6980e51c68c66c

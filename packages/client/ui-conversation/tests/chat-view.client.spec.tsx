@@ -38,6 +38,7 @@ import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 // Keyless create() persists under the bare declared key; clear between cases
 // so one harness's selection cannot rehydrate into the next.
@@ -326,6 +327,19 @@ function installScrollMetrics(element: HTMLElement, initialHeight: number, clien
       scrollTop = Math.max(0, Math.min(top, scrollHeight - clientHeight))
     },
   }
+}
+
+function requiredProcessStage(root: ParentNode): HTMLElement {
+  const stage = root.querySelector<HTMLElement>('[data-process-stage-title]')
+  if (stage === null) throw new Error('expected a non-empty process stage')
+  expect(stage.textContent?.trim()).not.toBe('')
+  return stage
+}
+
+function expectSafeProcessStage(root: ParentNode, rejected: readonly string[] = []): HTMLElement {
+  const stage = requiredProcessStage(root)
+  for (const fragment of rejected) expect(stage.textContent).not.toContain(fragment)
+  return stage
 }
 
 describe('Chat node rendering', () => {
@@ -727,6 +741,7 @@ describe('ChatView', () => {
   })
 
   it('keeps the second-turn process summary after its live details settle away', () => {
+    vi.useFakeTimers()
     const h = makeHarness({
       nodes: [
         user(1, '第一轮'), assistant(2, '第一轮结果'),
@@ -744,8 +759,9 @@ describe('ChatView', () => {
       '[data-chat-process-turn="2"] [data-process-panel="running"]',
     ) as HTMLDetailsElement
     expect(runningSecond.open).toBe(true)
-    expect(runningSecond.querySelector('[data-process-stage-title]')?.textContent)
-      .toBe('比较第二轮三个选项的影响')
+    act(() => { vi.advanceTimersByTime(850) })
+    expectSafeProcessStage(runningSecond, ['比较第二轮三个选项的影响'])
+    expect(view.container.querySelectorAll('[data-chat-process-turn]')).toHaveLength(1)
 
     act(() => {
       h.set({
@@ -764,6 +780,7 @@ describe('ChatView', () => {
     ) as HTMLDetailsElement
     expect(settledSecond).toBe(runningSecond)
     expect(settledSecond.open).toBe(false)
+    expect(view.container.querySelector('[data-chat-process-turn="1"]')).toBeNull()
     expect(view.getByText('第二轮结果')).toBeTruthy()
   })
 
@@ -999,7 +1016,8 @@ describe('ChatView', () => {
     expect(status.textContent).toMatch(/^Deep diving\.\.\.·1 步·2分0\d秒$/)
   })
 
-  it('never promotes a sentence copied from a longer user request into the stage title', () => {
+  it('uses a non-empty safe stage instead of a sentence copied from a longer user request', () => {
+    vi.useFakeTimers()
     const request = [
       'Begin with a short explanation.',
       'Then after the tool result, reply with the single word DONE and stop.',
@@ -1018,9 +1036,163 @@ describe('ChatView', () => {
       running: true,
     })
     const view = render(<h.ChatView {...h.props} />)
-    const stageTitle = view.container.querySelector('[data-process-stage-title]')
-    expect(stageTitle?.textContent).toBe('正在获取第一个执行信号')
-    expect(stageTitle?.textContent).not.toContain('Then after the tool result')
+    act(() => { vi.advanceTimersByTime(850) })
+    expectSafeProcessStage(view.container, [request, 'Then after the tool result'])
+  })
+
+  it('keeps a reasoning-only long task on a non-empty safe stage while raw progress stays in details', () => {
+    vi.useFakeTimers()
+    const query = '设计一个页面'
+    const rawReasoning = 'Think: query="设计一个页面" Length: 1200 words Tone: concise; run pnpm --filter web test at /tmp/deepseek-harness'
+    const h = makeHarness({
+      nodes: [user(1, query)],
+      partial: {
+        turn: 1,
+        step: 1,
+        blocks: [{ kind: 'reasoning', text: rawReasoning }],
+      },
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const panel = view.container.querySelector('[data-process-panel="running"]') as HTMLDetailsElement
+    act(() => { vi.advanceTimersByTime(850) })
+    expectSafeProcessStage(panel, [
+      'Think', query, 'Length', 'Tone', 'pnpm', '/tmp/deepseek-harness', rawReasoning,
+    ])
+    const details = panel.querySelector('[data-process-live-disclosure]') as HTMLDetailsElement
+    expect(details.open).toBe(false)
+    expect(details.textContent).toContain(rawReasoning)
+  })
+
+  it('matches the safe fallback language to the user instead of the browser locale', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'Build a small HTML story page')],
+      partial: {
+        turn: 1,
+        step: 1,
+        blocks: [{ kind: 'reasoning', text: 'Think: choose a narrative structure.' }],
+      },
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(requiredProcessStage(view.container).textContent)
+      .toBe('Shaping the story page and its interactions')
+    expect(view.queryByText('构思故事网页的视觉与交互')).toBeNull()
+  })
+
+  it.each([
+    ['null', async () => null],
+    ['unavailable', async () => ({ kind: 'unavailable' as const, reason: 'generation-failed' as const })],
+  ])('keeps the safe non-empty stage when the presentation sidecar returns %s', async (_label, refine) => {
+    vi.useFakeTimers()
+    const h = makeHarness({
+      nodes: [user(1, '规划一个长任务')],
+      partial: {
+        turn: 1, step: 1,
+        blocks: [{ kind: 'reasoning', text: 'Think: query=规划一个长任务; Length: long; Tone: direct' }],
+      },
+      running: true,
+    })
+    h.props.refineProcessStage = vi.fn(refine)
+    const view = render(<h.ChatView {...h.props} />)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(850) })
+    const safeStage = expectSafeProcessStage(view.container, ['Think', 'Length', 'Tone'])
+    const safeTitle = safeStage.textContent
+    await act(async () => { await vi.advanceTimersByTimeAsync(350) })
+
+    expect(h.props.refineProcessStage).toHaveBeenCalledTimes(1)
+    expect(requiredProcessStage(view.container)).toBe(safeStage)
+    expect(safeStage.textContent).toBe(safeTitle)
+  })
+
+  it('retries the presentation sidecar when Tool activity arrives after a budget response', async () => {
+    vi.useFakeTimers()
+    const refine = vi.fn()
+      .mockResolvedValueOnce({ kind: 'unavailable', reason: 'call-budget-reached' })
+      .mockResolvedValueOnce({
+        kind: 'stage', cursor: 12, action: 'append', title: '校验网页的交互结构',
+      })
+    const h = makeHarness({
+      nodes: [user(1, '做一个有动效的故事网页')],
+      partial: {
+        turn: 1, step: 1,
+        blocks: [{ kind: 'reasoning', text: 'Comparing narrative structures.' }],
+      },
+      running: true,
+    })
+    h.props.refineProcessStage = refine
+    const view = render(<h.ChatView {...h.props} />)
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_201)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(refine).toHaveBeenNthCalledWith(1, {
+      turn: 1, afterSeq: -1, acceptedStages: [],
+    })
+
+    act(() => {
+      h.set({
+        runningCalls: [{
+          ...runningCall('inspect-page'),
+          turn: 1,
+          argsRaw: JSON.stringify({
+            command: 'inspect', description: 'Check the page interaction structure',
+          }),
+        }],
+      })
+    })
+    await act(async () => {
+      vi.advanceTimersByTime(1_201)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(refine).toHaveBeenNthCalledWith(2, {
+      turn: 1, afterSeq: -1, acceptedStages: [],
+    })
+    await expect(refine.mock.results[1]?.value).resolves.toMatchObject({
+      kind: 'stage', title: '校验网页的交互结构',
+    })
+    // The sidecar result lands immediately; the mounted semantic trail applies
+    // its in-place replacement in the following layout pass.
+    await act(async () => {
+      await refine.mock.results[1]?.value
+      await Promise.resolve()
+    })
+    // Debugging this regression needs the exact semantic rail, not the raw
+    // technical detail rows which intentionally retain the Tool description.
+    const stageTitles = [...view.container.querySelectorAll<HTMLElement>('[data-process-stage-title]')]
+      .map(stage => stage.textContent)
+    expect(stageTitles).toEqual(['校验网页的交互结构'])
+    expect(within(view.container).queryByText('Check the page interaction structure')).toBeNull()
+  })
+
+  it('keeps the same safe stage before and after a timed-out presentation sidecar returns null', async () => {
+    vi.useFakeTimers()
+    const h = makeHarness({
+      nodes: [user(1, '检查长时间运行任务')],
+      partial: {
+        turn: 1, step: 1,
+        blocks: [{ kind: 'reasoning', text: 'Think: inspect /workspace/app then run pnpm test' }],
+      },
+      running: true,
+    })
+    h.props.refineProcessStage = vi.fn(() => new Promise<null>((resolve) => {
+      window.setTimeout(() => { resolve(null) }, 30_000)
+    }))
+    const view = render(<h.ChatView {...h.props} />)
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(850) })
+    const safeStage = expectSafeProcessStage(view.container, ['Think', '/workspace/app', 'pnpm test'])
+    const safeTitle = safeStage.textContent
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_350) })
+
+    expect(h.props.refineProcessStage).toHaveBeenCalledTimes(1)
+    expect(requiredProcessStage(view.container)).toBe(safeStage)
+    expect(safeStage.textContent).toBe(safeTitle)
   })
 
   it('keeps dynamic activity across snapshots when an older title appears again', () => {
@@ -1074,18 +1246,21 @@ describe('ChatView', () => {
     expect(view.queryByText('设计与实现')).toBeNull()
   })
 
-  it('switches from local fallback to one stable refined trail without duplicate or backward rows', () => {
+  it('promotes a refined stage in place over the safe fallback without duplicate or backward rows', () => {
+    const safeFallback = '形成任务的可执行方案'
     const view = render(
       <ProcessPanel
         state="running"
         count={1}
         trailSource="local"
-        lines={[{ key: 'local:a', text: '比较页面方案', state: 'active', priority: 2 }]}
+        lines={[{ key: 'local:safe', text: safeFallback, state: 'active', priority: 0 }]}
         t={makeTranslate(zh, commonZh)}
       >
         {null}
       </ProcessPanel>,
     )
+    const panel = view.container.querySelector('[data-process-panel="running"]') as HTMLDetailsElement
+    const stageSeat = requiredProcessStage(panel)
 
     view.rerender(
       <ProcessPanel
@@ -1100,7 +1275,8 @@ describe('ChatView', () => {
         {null}
       </ProcessPanel>,
     )
-    expect(view.queryByText('比较页面方案')).toBeNull()
+    expect(requiredProcessStage(panel)).toBe(stageSeat)
+    expect(view.queryByText(safeFallback)).toBeNull()
     expect(view.getAllByText('梳理导航层级')).toHaveLength(1)
 
     view.rerender(
@@ -1116,6 +1292,7 @@ describe('ChatView', () => {
         {null}
       </ProcessPanel>,
     )
+    expect(requiredProcessStage(panel)).toBe(stageSeat)
     expect(view.queryByText('梳理导航层级')).toBeNull()
     expect(view.getAllByText('确定导航信息层级')).toHaveLength(1)
 
@@ -1139,6 +1316,162 @@ describe('ChatView', () => {
     )
     expect(view.getAllByText('确定导航信息层级')).toHaveLength(1)
     expect(view.getAllByText('实现并校验交互')).toHaveLength(1)
+  })
+
+  it('promotes sidecar stages in place and starts the second turn with independent refinement state', async () => {
+    vi.useFakeTimers()
+    const refine = vi.fn()
+      .mockResolvedValueOnce({ kind: 'stage', cursor: 2, action: 'replace-current', title: '梳理第一轮范围' })
+      .mockResolvedValueOnce({ kind: 'stage', cursor: 5, action: 'replace-current', title: '比较第二轮方案' })
+    const h = makeHarness({
+      nodes: [user(1, '第一轮任务')],
+      partial: {
+        turn: 1, step: 1,
+        blocks: [{ kind: 'reasoning', text: 'Think: query=第一轮任务; Length: long' }],
+      },
+      running: true,
+    })
+    h.props.refineProcessStage = refine
+    const view = render(<h.ChatView {...h.props} />)
+    const firstPanel = view.container.querySelector(
+      '[data-chat-process-turn="1"] [data-process-panel="running"]',
+    ) as HTMLDetailsElement
+    await act(async () => { await vi.advanceTimersByTimeAsync(850) })
+    const firstSeat = requiredProcessStage(firstPanel)
+    expectSafeProcessStage(firstPanel, ['Think', '第一轮任务', 'Length'])
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(350) })
+
+    expect(requiredProcessStage(firstPanel)).toBe(firstSeat)
+    expect(firstSeat.textContent).toBe('梳理第一轮范围')
+    expect(refine).toHaveBeenNthCalledWith(1, {
+      turn: 1, afterSeq: -1, acceptedStages: [],
+    })
+
+    act(() => {
+      h.set({
+        nodes: [
+          user(1, '第一轮任务'), assistant(2, '第一轮结果'),
+          user(4, '第二轮任务'),
+        ],
+        partial: {
+          turn: 2, step: 1,
+          blocks: [{ kind: 'reasoning', text: 'Think: query=第二轮任务; Tone: concise' }],
+        },
+        turnEnds: new Map([[1, 3]]),
+        running: true,
+      })
+    })
+
+    const settledFirst = view.container.querySelector(
+      '[data-chat-process-turn="1"] [data-process-panel="done"]',
+    ) as HTMLDetailsElement
+    const secondPanel = view.container.querySelector(
+      '[data-chat-process-turn="2"] [data-process-panel="running"]',
+    ) as HTMLDetailsElement
+    expect(settledFirst.open).toBe(false)
+    expect(secondPanel.open).toBe(true)
+    await act(async () => { await vi.advanceTimersByTimeAsync(850) })
+    expectSafeProcessStage(secondPanel, ['Think', '第二轮任务', 'Tone'])
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(350) })
+
+    expect(requiredProcessStage(secondPanel).textContent).toBe('比较第二轮方案')
+    expect(refine).toHaveBeenNthCalledWith(2, {
+      turn: 2, afterSeq: -1, acceptedStages: [],
+    })
+    expect(within(secondPanel).queryByText('梳理第一轮范围')).toBeNull()
+  })
+
+  it('keeps a streaming answer out of the stage rail and rejects answer constraints as stages', () => {
+    vi.useFakeTimers()
+    const story = '会修月亮的人'
+    const h = makeHarness({
+      nodes: [user(1, '写一个短故事')],
+      partial: {
+        turn: 1, step: 1,
+        blocks: [
+          { kind: 'reasoning', text: 'Length: a reasonably concise short story (500-1000 words)' },
+          { kind: 'text', text: story },
+        ],
+      },
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const panel = view.container.querySelector('[data-process-panel="running"]') as HTMLDetailsElement
+    const result = panel.querySelector('[data-process-result]') as HTMLElement
+
+    expect(result.dataset.processResultKind).toBe('candidate')
+    expect(within(result).getByText(story)).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(850) })
+    expectSafeProcessStage(panel, ['Length', '500-1000 words', story])
+    expect(panel.querySelector('ol')).toBeNull()
+    expect((panel.querySelector('[data-process-live-disclosure]') as HTMLDetailsElement).open).toBe(false)
+    expect(view.queryByText('阶段结果')).toBeNull()
+  })
+
+  it('promotes a pre-interaction explanation in place only when later activity appears', () => {
+    const explanation = '你的选择会改变后续建议，所以先确认你偏好的方向。'
+    const h = makeHarness({
+      nodes: [user(1, '帮我选一个方向')],
+      partial: {
+        turn: 1, step: 1,
+        blocks: [
+          { kind: 'reasoning', text: '比较选项对后续推荐的影响' },
+          { kind: 'text', text: explanation },
+        ],
+      },
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const candidate = view.container.querySelector('[data-process-result]') as HTMLElement
+    expect(candidate.dataset.processResultKind).toBe('candidate')
+    expect(view.queryByText('阶段结果')).toBeNull()
+
+    act(() => {
+      h.set({
+        partial: {
+          turn: 1, step: 1,
+          blocks: [
+            { kind: 'reasoning', text: '比较选项对后续推荐的影响' },
+            { kind: 'text', text: explanation },
+            { kind: 'tool-call', callId: 'question', name: 'ask_user_question', argsRaw: '{}' },
+          ],
+        },
+      })
+    })
+
+    const promoted = view.container.querySelector('[data-process-result]') as HTMLElement
+    expect(promoted).toBe(candidate)
+    expect(promoted.dataset.processResultKind).toBe('intermediate')
+    expect(within(promoted).getByText('阶段结果')).toBeTruthy()
+    expect(view.getAllByText(explanation)).toHaveLength(1)
+  })
+
+  it('keeps a pre-tool explanation visible when a later answer fragment starts streaming', () => {
+    const explanation = '先说明选择依据，再请你确认偏好。'
+    const h = makeHarness({
+      nodes: [
+        user(1, '帮我选一个方向'),
+        { ...assistant(2, explanation), blocks: [
+          { kind: 'text', text: explanation },
+          { kind: 'tool-call', callId: 'question', name: 'ask_user_question', argsRaw: '{}' },
+        ] },
+        toolResult(3, 'question', 'ask_user_question'),
+      ],
+      partial: {
+        turn: 1,
+        step: 2,
+        blocks: [{ kind: 'text', text: '好' }],
+      },
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const result = view.container.querySelector('[data-process-result]') as HTMLElement
+    expect(result.dataset.processResultKind).toBe('intermediate')
+    expect(within(result).getByText(explanation)).toBeTruthy()
+    expect(within(result).queryByText('好')).toBeNull()
+    expect(view.getAllByText(explanation)).toHaveLength(1)
   })
 
   it('keeps a pre-question explanation in one stable process result, then collapses it only after turn/end', () => {

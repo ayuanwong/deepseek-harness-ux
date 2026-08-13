@@ -15,6 +15,12 @@
 - group:
   - img
   - text: Process needs attention · 3 steps · {{duration}}
+  - list "Previous stages":
+    - listitem: Forming an executable approach
+  - log "Run activity": Print alpha to stdout
+  - region "Stage result":
+    - text: Stage result
+    - paragraph: Reading the workspace now.
   - group:
     - img
     - text: Run details

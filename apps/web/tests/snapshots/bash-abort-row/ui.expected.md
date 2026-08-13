@@ -13,6 +13,9 @@
 - group:
   - img
   - text: Process needs attention · 3 steps · {{duration}}
+  - list "Previous stages":
+    - listitem: Wait until cancellation
+  - log "Run activity": Process needs attention Write skipped marker
   - group:
     - img
     - text: Run details

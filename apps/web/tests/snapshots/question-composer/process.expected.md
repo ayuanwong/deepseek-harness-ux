@@ -1,10 +1,9 @@
 - group:
   - status: Deep diving...
-  - log "Run activity":
-    - text: Confirm the path
-    - region "Stage result":
-      - text: Stage result
-      - paragraph: Your choice will change the recommendation, so first tell me which color direction fits you best.
+  - log "Run activity": Forming an executable approach
+  - region "Stage result":
+    - text: Stage result
+    - paragraph: Your choice will change the recommendation, so first tell me which color direction fits you best.
   - group:
     - img
     - text: Run details

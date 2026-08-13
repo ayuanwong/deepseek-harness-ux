@@ -2544,7 +2544,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ProcessStagePresentationResult',
-    declaration: 'export type ProcessStagePresentationResult = {\n    readonly kind: \'stage\';\n    readonly cursor: number;\n    readonly action: \'replace-current\' | \'append\';\n    readonly title: string;\n} | {\n    readonly kind: \'unchanged\';\n    readonly cursor: number;\n} | {\n    readonly kind: \'unavailable\';\n    readonly reason: \'session-not-live\' | \'turn-not-found\' | \'turn-not-open\' | \'route-unavailable\' | \'invalid-request\' | \'input-too-large\' | \'call-budget-reached\' | \'generation-failed\';\n    readonly cursor?: number;\n};',
+    declaration: 'export type ProcessStagePresentationResult = {\n    readonly kind: \'stage\';\n    readonly cursor: number;\n    readonly action: \'replace-current\' | \'append\';\n    readonly title: string;\n} | {\n    readonly kind: \'unchanged\';\n    readonly cursor?: number;\n} | {\n    readonly kind: \'unavailable\';\n    readonly reason: \'session-not-live\' | \'turn-not-found\' | \'turn-not-open\' | \'route-unavailable\' | \'invalid-request\' | \'input-too-large\' | \'call-budget-reached\' | \'generation-failed\';\n    readonly cursor?: never;\n};',
   },
   {
     name: 'ProjectionChangeListener',

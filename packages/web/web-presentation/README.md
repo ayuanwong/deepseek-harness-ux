@@ -10,9 +10,9 @@ All limits are required: `maxInputBytes`, `maxOutputTokens`, `timeoutMs`, `maxHe
 
 ## Semantics
 
-The service reads bounded facts from the Session log, records the exact auxiliary request as `web/presentation-llm-request`, and returns transient labels through Typert Remote. It never rewrites an Assistant message, System Prompt, request header, Tool result, or derived model history. Process results may replace only the current label or append a later label. Answer-heading results address parsed Markdown offsets and apply only to the closing finalized Assistant message.
+The service reads bounded facts from the Session log, records the exact auxiliary request as `web/presentation-llm-request`, and returns transient labels through Typert Remote. It never rewrites an Assistant message, System Prompt, request header, Tool result, or derived model history. A process cursor acknowledges only source events represented by a validated decision; unavailable results do not advance it. Process results may replace only the current label or append a later label. Answer-heading results address parsed Markdown offsets and apply only to the closing finalized Assistant message.
 
-Failures, timeouts, unavailable routes, invalid JSON, and over-limit inputs return an unavailable result. The browser keeps the authored heading or local activity summary, so the auxiliary call never blocks the Agent or removes readable content.
+Failures, timeouts, unavailable routes, invalid JSON, and over-limit inputs return an unavailable result without consuming the failed source cursor. The browser keeps the authored answer heading or a safe task-object, Todo, or Tool activity title; raw streamed reasoning is never promoted directly into the headline. The auxiliary call therefore never blocks the Agent or removes readable content.
 
 ## Model Experience
 
@@ -20,11 +20,11 @@ Failures, timeouts, unavailable routes, invalid JSON, and over-limit inputs retu
 
 #### What the model sees
 
-The main Agent sees no added instruction or message. A separate presentation request sees a bounded JSON projection of logged activity or finalized heading/section pairs, no tools, and a concise JSON-only instruction. Raw Tool commands, paths, and result text are omitted.
+The main Agent sees no added instruction or message. A separate presentation request sees a bounded JSON projection of logged activity or finalized heading/section pairs, no tools, and a concise JSON-only instruction. Running-stage input also carries a Chinese-or-English `displayLanguage` inferred from the Turn's latest direct human message, so reasoning written in another language does not determine the visible title language. Raw Tool commands, paths, and result text are omitted.
 
 #### Token effect
 
-Small and bounded. Each accepted running-stage boundary may use one auxiliary request up to `maxStageCallsPerTurn`; one completed closing answer may use one additional heading request. These tokens belong only to the presentation call and never enter the main Agent request or Session-derived history.
+Small and bounded. Each accepted running-stage boundary may use one auxiliary request up to `maxStageCallsPerTurn`; reasoning-only calls use at most half that budget so Todo and Tool boundaries retain capacity. Failed or invalid calls do not consume the budget. One completed closing answer may use one additional heading request. These tokens belong only to the presentation call and never enter the main Agent request or Session-derived history.
 
 #### KV Cache effect
 
@@ -33,5 +33,5 @@ Independent from the main Agent prefix. The auxiliary request uses its own syste
 ## Known Limitations and Deferred Work
 
 - Refinements require a live Session and its currently configured model route. Historical sessions reopened after Host restart keep the authored headings because the validated response cache is intentionally transient.
-- Running-stage requests are throttled over coarse stream revisions and capped; very short turns may show only the local fallback summary.
+- Running-stage requests are throttled over coarse stream revisions and capped; before a valid refinement arrives, the browser shows a safe task-object title rather than an unfinished reasoning fragment.
 - The service omits raw Tool result text to avoid leaking paths or command output, so a stage label can be less specific when no model-authored description or Todo is available.

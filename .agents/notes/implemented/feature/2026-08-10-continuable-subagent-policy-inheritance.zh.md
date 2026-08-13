@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-自[进程内策略继承决策](2026-07-25-subagent-policy-inheritance.md)以来，一次性进程内驱动器一直会把父级的沙箱／审批覆盖项注入其子级，但可继续路径从未这样做：`SubagentContinuationManager` 的物化只应用子级组合与 Activation（激活）设置注册表。默认组合包把两个委派工具都配置为 `backgroundMode: continuable`，因此在默认部署中，每个后台子 agent（智能体）都静默回退到部署默认值：切换到 `danger-full-access` 的父级产出的子 agent 卡在 `workspace-write`，每次工作区外操作都会触发审批提示；父级无人值守的 `'never'` 审批立场也退回为发起提示的行为（上游问题 #334）。
+自[进程内策略继承决策](2026-07-25-subagent-policy-inheritance.md)以来，一次性进程内驱动器一直会把父级的沙箱／审批覆盖项注入其子级，但可继续路径从未这样做：`SubagentContinuationManager` 的物化只应用子级组合与 Activation（激活）设置注册表。默认组合包把两个委派工具都配置为 `backgroundMode: continuable`，因此在默认部署中，每个后台子 agent（智能体）都静默回退到部署默认值：切换到 `danger-full-access` 的父级产出的子 agent 卡在 `workspace-write`，每次工作区外操作都会触发审批提示；父级无人值守的 `'never'` 审批立场也退回为发起提示的行为（[dsh-external/issues#334](https://github.com/dsh-external/issues/issues/334)）。
 
 ## 决策
 

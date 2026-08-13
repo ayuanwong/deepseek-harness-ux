@@ -102,6 +102,11 @@ describe('web-presentation Loader composition', () => {
       source: { kind: 'user' },
     }), { surfaceOp: 'append' })
     session.append('step/start', { turn: 1, step: 1 })
+    session.append('assistant/chunk', {
+      turn: 1,
+      step: 1,
+      chunk: { type: 'reasoning-delta', index: 0, text: 'Comparing navigation structures.' },
+    })
     const answer = session.append('assistant/message', {
       turn: 1,
       step: 1,

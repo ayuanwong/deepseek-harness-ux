@@ -117,6 +117,9 @@ export function apply(ctx: Context): void {
   const workspaces = ctx.workspaces
   const layout = ctx.layout
   const slots = ctx.slots
+  const optionalWebPresentation = (): typeof ctx.remote.webPresentation | undefined => (
+    ctx.get('remote.webPresentation') as typeof ctx.remote.webPresentation | undefined
+  )
 
   registerConversationNodes(ctx)
   registerChatNodeRenderers(ctx)
@@ -422,8 +425,10 @@ export function apply(ctx: Context): void {
             })
         },
         refineResponseHeadings: async (messageId) => {
+          const webPresentation = optionalWebPresentation()
+          if (webPresentation === undefined) return []
           try {
-            const result = await ctx.remote.webPresentation['response-headings']({ sessionId, messageId })
+            const result = await webPresentation['response-headings']({ sessionId, messageId })
             return result.ok && result.value.kind === 'refined' ? result.value.replacements : []
           } catch {
             // Presentation refinement is optional; the authored headings remain visible.
@@ -431,8 +436,10 @@ export function apply(ctx: Context): void {
           }
         },
         refineProcessStage: async (request) => {
+          const webPresentation = optionalWebPresentation()
+          if (webPresentation === undefined) return null
           try {
-            const result = await ctx.remote.webPresentation['process-stage']({ sessionId, ...request })
+            const result = await webPresentation['process-stage']({ sessionId, ...request })
             return result.ok ? result.value : null
           } catch {
             // Presentation refinement is optional; the local activity summary remains visible.

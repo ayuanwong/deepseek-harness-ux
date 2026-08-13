@@ -21,6 +21,9 @@
 - text: "Interjection: include the word ORANGE in your final reply. {{clock}}"
 - button "Copy":
   - img
+- group:
+  - img
+  - text: Process · 2 steps · {{duration}}
 - paragraph: "Got it: BANANA and ORANGE."
 - button "Copy":
   - img

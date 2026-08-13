@@ -15,6 +15,7 @@
 - group:
   - img
   - text: Process needs attention · 2 steps · {{duration}}
+  - log "Run activity": Forming an executable approach
   - group:
     - img
     - text: Run details

@@ -219,5 +219,5 @@ Host Remote service. Both methods are presentation-only: they dispatch independe
 @Remote('process-stage') async processStage(request: ProcessStagePresentationRequest): Promise<ProcessStagePresentationResult>
 ```
 
-Source: [`packages/web/web-presentation/src/index.ts:333`](../../packages/web/web-presentation/src/index.ts)
+Source: [`packages/web/web-presentation/src/index.ts:459`](../../packages/web/web-presentation/src/index.ts)
 <!-- END GENERATED cordis-surface -->
