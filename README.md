@@ -93,6 +93,12 @@ pnpm run hygiene
 pnpm run doc-sync
 ```
 
+## Community links
+
+- [dsh-tianshu-tui](https://github.com/huiliyi37/dsh-tianshu-tui)
+- [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI)
+- [DSH Find](https://dshfind.com)
+
 ## License and attribution
 
 This repository is derived from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and preserves upstream notices. The project uses the BSD 3-Clause license; third-party dependencies and license terms are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

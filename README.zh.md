@@ -93,6 +93,12 @@ pnpm run hygiene
 pnpm run doc-sync
 ```
 
+## 友情链接
+
+- [dsh-tianshu-tui](https://github.com/huiliyi37/dsh-tianshu-tui)
+- [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI)
+- [DSH Find](https://dshfind.com)
+
 ## 许可证与归属
 
 本仓库派生自 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，并保留上游声明。项目使用 BSD 3-Clause 许可证；第三方依赖及许可条款见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
