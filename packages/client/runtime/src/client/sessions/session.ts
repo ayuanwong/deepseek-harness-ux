@@ -105,6 +105,8 @@ export class Session implements SessionFace {
   private liveBuffer: { event: SessionEvent; view: ToolEventView | undefined }[] = []
   /** Gap repair in flight; live events detour to the buffer until the tail page lands. */
   private stitching = false
+  /** An idle-edge tail refresh requested while a gap repair already owns the stitch lane. */
+  private idleTailRefreshQueued = false
   /** subscribed.lastSeq baseline (gap detection; null when no subscribed frame arrived — degrade to the liveBuffer dedup path). */
   private subscribedLastSeq: number | null = null
 
@@ -433,6 +435,7 @@ export class Session implements SessionFace {
     this.pendingRev++
     this.subscribedLastSeq = null
     this.liveBuffer = []
+    this.idleTailRefreshQueued = false
     this.notifier.markDirty()
     await this.open()
   }
@@ -527,8 +530,16 @@ export class Session implements SessionFace {
     }
     if (running) this.firstPromptPendingTurn = false
     if (this.running === running) return
+    const wasRunning = this.running
     this.running = running
     this.notifier.markDirty()
+    // running:false is authoritative even when the multiplexed event lane is
+    // a frame behind. Re-read the tail without flashing the history loader so
+    // a delayed turn/end can repair the durable timeline in the background.
+    if (wasRunning && !running) {
+      if (this.openState === 'open') void this.refreshIdleTail()
+      else if (this.openState === 'loading') this.idleTailRefreshQueued = true
+    }
   }
 
   /**
@@ -632,6 +643,13 @@ export class Session implements SessionFace {
         if (result.ok) this.installWindow(result.value.events, result.value.hasMore, result.value.projections)
       }
       this.openState = 'open'
+      // An idle frame can overtake this initial history response. The UI has
+      // already settled from the running bit; finish the queued tail repair
+      // after the window becomes installable instead of losing that edge.
+      if (!this.running && this.idleTailRefreshQueued) {
+        this.idleTailRefreshQueued = false
+        void this.refreshIdleTail()
+      }
     } catch (error) {
       if (generation !== this.openGeneration) return
       this.openState = 'error'
@@ -662,6 +680,38 @@ export class Session implements SessionFace {
     this.liveBuffer = []
     for (const item of buffered) this.appendLive(item.event, item.view)
     this.notifier.markDirty()
+  }
+
+  /** Refresh only the overlapping tail while retaining pages the reader has
+   * already loaded before it. History tail pages replace their overlapping
+   * suffix by seq; the retained prefix keeps its original hasMore authority. */
+  private installTailWindow(entries: HistoryEntry[], hasMore: boolean, projections?: ProjectionsBaseline): void {
+    const firstFreshSeq = entries[0]?.event.seq
+    if (firstFreshSeq === undefined) {
+      this.installWindow(this.events.map((event, index) => ({
+        event,
+        ...(this.views[index] === undefined ? {} : { view: this.views[index] }),
+      })), this.hasMore, projections)
+      return
+    }
+    const overlap = this.events.findIndex(event => event.seq >= firstFreshSeq)
+    const candidatePrefixLength = overlap === -1 ? this.events.length : overlap
+    const prefixTailSeq = this.events[candidatePrefixLength - 1]?.seq
+    // Retain older pages only when they meet the fresh tail contiguously. A
+    // non-overlapping, non-adjacent page is a replacement, not an append: the
+    // Conversation runtime must never be handed a raw window with a seq hole.
+    const prefixLength = prefixTailSeq === undefined || prefixTailSeq + 1 === firstFreshSeq
+      ? candidatePrefixLength
+      : 0
+    const prefix = this.events.slice(0, prefixLength).map((event, index): HistoryEntry => ({
+      event,
+      ...(this.views[index] === undefined ? {} : { view: this.views[index] }),
+    }))
+    this.installWindow(
+      [...prefix, ...entries],
+      prefix.length > 0 ? this.hasMore : hasMore,
+      projections,
+    )
   }
 
   /** Seq-guarded append shared by stitching and the open-state live path. */
@@ -720,6 +770,36 @@ export class Session implements SessionFace {
       console.error('[web-runtime] gap repair failed:', error)
     } finally {
       this.stitching = false
+      if (this.idleTailRefreshQueued) {
+        this.idleTailRefreshQueued = false
+        void this.refreshIdleTail()
+      }
+    }
+  }
+
+  /** Idle-edge resync-lite: preserve the current window and replace only its
+   * overlapping tail. If a gap repair is already in flight, run once after it
+   * so the idle edge cannot be swallowed by transport ordering. */
+  private async refreshIdleTail(): Promise<void> {
+    if (this.stitching) {
+      this.idleTailRefreshQueued = true
+      return
+    }
+    this.stitching = true
+    const generation = this.openGeneration
+    try {
+      const { result } = await this.history({ maxMessages: PAGE_MESSAGES })
+      if (result.ok && generation === this.openGeneration && this.openState === 'open') {
+        this.installTailWindow(result.value.events, result.value.hasMore, result.value.projections)
+      }
+    } catch (error) {
+      console.error('[web-runtime] idle tail refresh failed:', error)
+    } finally {
+      this.stitching = false
+      if (this.idleTailRefreshQueued) {
+        this.idleTailRefreshQueued = false
+        void this.refreshIdleTail()
+      }
     }
   }
 

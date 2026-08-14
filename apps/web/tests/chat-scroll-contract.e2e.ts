@@ -570,6 +570,68 @@ describe('web e2e: long Chat scroll contract', () => {
         expect(await liveRow.getAttribute('data-state')).toBe('running')
         await expectBottom(world.page)
 
+        // The running technical log is its own bounded scrollport. A large
+        // Windows wheel tick used to finish this inner scroll, leak its
+        // remainder into the transcript, and race ChatView's custom bottom
+        // ledger with native scroll anchoring. The result was a composer that
+        // travelled upward over a long empty tail. Keep both scroll positions
+        // and the viewport-owned composer geometry explicit here.
+        const technicalDetails = world.page.locator(
+          '[data-process-panel="running"] [data-process-live-disclosure] > div',
+        ).last()
+        // This fixture's waiting Tool contributes only one row until release;
+        // extend that real scrollport with inert geometry so the browser can
+        // exercise the same long-log boundary as the recorded 147-step run.
+        await technicalDetails.evaluate((element) => {
+          for (let index = 0; index < 12; index += 1) {
+            const row = document.createElement('div')
+            row.dataset.scrollContractFiller = ''
+            row.style.height = '24px'
+            row.style.flex = '0 0 24px'
+            element.append(row)
+          }
+        })
+        await expect.poll(() => technicalDetails.evaluate(
+          element => element.scrollHeight - element.clientHeight,
+        ), { timeout: 10_000 }).toBeGreaterThan(1)
+        const beforeTechnicalWheel = await world.page.locator('[data-conversation-scroll]').evaluate((host) => {
+          const composer = host.querySelector<HTMLElement>('[data-composer-seat]')
+          if (composer === null) throw new Error('conversation composer is missing')
+          return {
+            composerBottom: composer.getBoundingClientRect().bottom,
+            hostBottom: host.getBoundingClientRect().bottom,
+            overflowAnchor: getComputedStyle(host).overflowAnchor,
+            scrollTop: host.scrollTop,
+          }
+        })
+        expect(beforeTechnicalWheel.overflowAnchor).toBe('none')
+        await technicalDetails.hover()
+        await world.page.mouse.wheel(0, 5_000)
+        await nextPaint(world.page)
+        const afterTechnicalWheel = await world.page.locator('[data-conversation-scroll]').evaluate((host) => {
+          const composer = host.querySelector<HTMLElement>('[data-composer-seat]')
+          if (composer === null) throw new Error('conversation composer is missing')
+          return {
+            composerBottom: composer.getBoundingClientRect().bottom,
+            documentHeight: document.documentElement.scrollHeight,
+            hostBottom: host.getBoundingClientRect().bottom,
+            scrollTop: host.scrollTop,
+            viewportHeight: document.documentElement.clientHeight,
+          }
+        })
+        expect(await technicalDetails.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+        expect(await technicalDetails.evaluate((element) => {
+          const event = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 40 })
+          return element.dispatchEvent(event)
+        })).toBe(false)
+        expect(afterTechnicalWheel.scrollTop).toBe(beforeTechnicalWheel.scrollTop)
+        expect(Math.abs(afterTechnicalWheel.composerBottom - afterTechnicalWheel.hostBottom))
+          .toBeLessThanOrEqual(GEOMETRY_TOLERANCE)
+        expect(afterTechnicalWheel.documentHeight).toBe(afterTechnicalWheel.viewportHeight)
+        await technicalDetails.evaluate((element) => {
+          element.querySelectorAll('[data-scroll-contract-filler]').forEach((row) => { row.remove() })
+        })
+
         await wheelTranscript(world.page, -1_200)
         await world.page.getByRole('button', { name: 'Back to bottom', exact: true }).waitFor({ timeout: 10_000 })
         const awayAnchor = await visibleFlowAnchor(world.page)

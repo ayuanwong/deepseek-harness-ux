@@ -1,6 +1,6 @@
-version: 1
-pair:
-  english: README.md
-  chinese: README.zh.md
-  scope: full-file
-  note: Both files describe the same community edition, source-run workflow, privacy policy, attribution, and license.
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write README.md
+README.md: e837a7f10011a2cae416d907c92f4ce3bde86920
+README.zh.md: 563c249a91e2e33956c732060b5cdfb76d12df56

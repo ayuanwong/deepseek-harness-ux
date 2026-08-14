@@ -765,6 +765,90 @@ describe('remaining branches', () => {
     expect(session.getSnapshot().removed).toBe(true)
   })
 
+  it('repulls the tail after running settles so a delayed turn/end repairs the open timeline', async () => {
+    const { api, session } = makeSession()
+    const openTurn = plainTurn(0, 0, '问', '答').slice(0, -1)
+    api.onHistory = () => histResponse(openTurn, false)
+    await session.open()
+    expect(session.getSnapshot().chat.timeline.turns.get(0)?.status).toBe('open')
+
+    session.handleRunning(true)
+    api.onHistory = () => histResponse([...openTurn, ev.turnEnd(5, 0)], false)
+    session.handleRunning(false)
+
+    // No loading transition: the existing window remains readable while the
+    // tail page catches the durable boundary up in the background.
+    expect(session.getSnapshot().openState).toBe('open')
+    expect(session.getSnapshot().running).toBe(false)
+    await vi.waitFor(() => {
+      expect(api.callsOf('session.history')).toHaveLength(2)
+      expect(session.getSnapshot().chat.timeline.turns.get(0)?.status).toBe('closed')
+    })
+    expect(session.getSnapshot().turnEnds.get(0)).toBe(5)
+  })
+
+  it('queues the idle tail repair when idle overtakes the initial history response', async () => {
+    const { api, session } = makeSession()
+    const openTurn = plainTurn(0, 0, '问', '答').slice(0, -1)
+    const gate = deferred<Awaited<ReturnType<FakeApiClient['onHistory']>>>()
+    let calls = 0
+    api.onHistory = () => {
+      calls++
+      return calls === 1
+        ? gate.promise
+        : histResponse([...openTurn, ev.turnEnd(5, 0)], false)
+    }
+
+    session.handleRunning(true)
+    const opening = session.open()
+    expect(session.getSnapshot().openState).toBe('loading')
+    session.handleRunning(false)
+    expect(session.getSnapshot().running).toBe(false)
+
+    gate.resolve(await histResponse(openTurn, false))
+    await opening
+    await vi.waitFor(() => {
+      expect(calls).toBe(2)
+      expect(session.getSnapshot().chat.timeline.turns.get(0)?.status).toBe('closed')
+    })
+    expect(session.getSnapshot().openState).toBe('open')
+  })
+
+  it('retains earlier loaded pages when the idle tail refresh replaces its overlapping suffix', async () => {
+    const { api, session } = makeSession()
+    const older = plainTurn(0, 0, '早问', '早答')
+    const openTail = plainTurn(6, 1, '新问', '新答').slice(0, -1)
+    api.onHistory = () => histResponse([...older, ...openTail], true)
+    await session.open()
+    expect(chatSeqs(session.getSnapshot())).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+
+    session.handleRunning(true)
+    api.onHistory = () => histResponse([...openTail, ev.turnEnd(11, 1)], false)
+    session.handleRunning(false)
+    await vi.waitFor(() => {
+      expect(session.getSnapshot().chat.timeline.turns.get(1)?.status).toBe('closed')
+    })
+
+    expect(chatSeqs(session.getSnapshot())).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+    expect(session.getSnapshot().chat.timeline.turns.get(0)?.status).toBe('closed')
+    expect(session.getSnapshot().hasMore).toBe(true)
+  })
+
+  it('replaces rather than concatenates a discontinuous idle tail page', async () => {
+    const { api, session } = makeSession()
+    api.onHistory = () => histResponse(plainTurn(0, 0, '旧问', '旧答'), true)
+    await session.open()
+
+    session.handleRunning(true)
+    api.onHistory = () => histResponse(plainTurn(20, 1, '新问', '新答'), false)
+    session.handleRunning(false)
+    await vi.waitFor(() => {
+      expect(api.callsOf('session.history')).toHaveLength(2)
+      expect(chatSeqs(session.getSnapshot())).toEqual([20, 21, 22, 23, 24, 25])
+    })
+    expect(session.getSnapshot().hasMore).toBe(false)
+  })
+
   it('drops live events while cold/error (no window upkeep)', async () => {
     const { api, session } = makeSession()
     session.handleMuxEnvelope('r' as never, { type: 'session/event', sessionId: SID, event: ev.user(0, '冷态帧') })

@@ -7,6 +7,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-height: 0;
+  max-height: 100%;
   min-width: 0;
   background: var(--dsw-alias-bg-base);
 
@@ -236,6 +238,13 @@
      than the glow. Clipping is unchanged — `overflow-y: auto` already made this
      a scroll container that clips both axes, so this only takes away the bar. */
   overflow-x: hidden;
+  /* ChatView owns transcript anchoring and bottom-follow. Native anchoring
+     racing that ledger during a live disclosure resize can move the whole
+     flow twice and leave the sticky composer above an empty tail. */
+  overflow-anchor: none;
+  /* Never pass a boundary gesture to the document/frame behind the one
+     authoritative conversation scrollport. */
+  overscroll-behavior-y: contain;
   /* Reserved unconditionally: the composer seat rides this box's content box in
      Chat and its padding box under a view's composer overlay, so an `auto`
      gutter moves the input card sideways by the bar's width whenever the two
@@ -251,6 +260,7 @@
 .root[data-phase='active'] .composerSeat {
   position: sticky;
   bottom: 0;
+  overflow-anchor: none;
   /* Above markdown CodeBlock sticky banners (z-index 6) so the footer never
      paints under a sticking code header while scrolling. */
   z-index: 7;

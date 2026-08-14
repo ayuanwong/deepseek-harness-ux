@@ -1246,6 +1246,26 @@ describe('ChatView', () => {
     expect(view.queryByText('设计与实现')).toBeNull()
   })
 
+  it('keeps a running technical-log wheel gesture inside the bounded detail scrollport', () => {
+    const view = render(
+      <ProcessPanel state="running" count={2} t={makeTranslate(zh, commonZh)}>
+        <div>first diagnostic row</div>
+        <div>second diagnostic row</div>
+      </ProcessPanel>,
+    )
+    const details = view.container.querySelector('[data-process-live-disclosure] > div') as HTMLDivElement
+    Object.defineProperty(details, 'clientHeight', { value: 200, configurable: true })
+    Object.defineProperty(details, 'scrollHeight', { value: 800, configurable: true })
+    Object.defineProperty(details, 'scrollTop', { value: 120, writable: true, configurable: true })
+
+    expect(fireEvent.wheel(details, { deltaY: 320 })).toBe(false)
+    expect(details.scrollTop).toBe(440)
+    expect(fireEvent.wheel(details, { deltaY: 600 })).toBe(false)
+    expect(details.scrollTop).toBe(600)
+    expect(fireEvent.wheel(details, { deltaY: -1, deltaMode: WheelEvent.DOM_DELTA_PAGE })).toBe(false)
+    expect(details.scrollTop).toBe(400)
+  })
+
   it('promotes a refined stage in place over the safe fallback without duplicate or backward rows', () => {
     const safeFallback = '形成任务的可执行方案'
     const view = render(
@@ -1520,6 +1540,108 @@ describe('ChatView', () => {
     expect(view.getByText(explanation).getClientRects()).toHaveLength(0)
     fireEvent.click(settledPanel.querySelector('[data-process-disclosure]') as HTMLElement)
     expect(view.getByText(explanation)).toBeTruthy()
+  })
+
+  it('settles and folds on authoritative idle before a delayed turn/end, while keeping the answer visible', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'inspect this'), assistant(2, 'The inspection is complete.')],
+      turnTimings: new Map([[1, { startTime: 1_000 }]]),
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const process = view.container.querySelector('[data-process-panel="running"]') as HTMLDetailsElement
+    expect(process.open).toBe(true)
+
+    // The running bit and composer settle first; the event lane still exposes
+    // an open Turn. That stale boundary must not own the visible activity.
+    act(() => { h.set({ running: false }) })
+    const idleProcess = view.container.querySelector('[data-process-panel="done"]') as HTMLDetailsElement
+    expect(idleProcess).toBe(process)
+    expect(idleProcess.open).toBe(false)
+    expect(within(idleProcess).queryByText('Deep diving...')).toBeNull()
+    expect(view.getByText('The inspection is complete.').closest('[data-process-panel]')).toBeNull()
+
+    // A later durable boundary repairs timing/turn authority without reopening
+    // or replacing the stable Process parent.
+    act(() => {
+      h.set({
+        turnTimings: new Map([[1, { startTime: 1_000, endTime: 4_000 }]]),
+        turnEnds: new Map([[1, 4]]),
+      })
+    })
+    const repairedProcess = view.container.querySelector('[data-process-panel="done"]') as HTMLDetailsElement
+    expect(repairedProcess).toBe(process)
+    expect(repairedProcess.open).toBe(false)
+    expect(view.getByText('The inspection is complete.').closest('[data-process-panel]')).toBeNull()
+  })
+
+  it('keeps an open turn active while idle is waiting on a user interaction', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'choose'), assistant(2, 'Please choose a path.')],
+      turnTimings: new Map([[1, { startTime: 1_000 }]]),
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    act(() => {
+      h.set({
+        running: false,
+        pending: [new PendingWait(
+          'question', RpcId('waiting-question'), SID,
+          { questions: [{ id: 'path', question: 'Which path?' }] }, vi.fn(),
+        )],
+      })
+    })
+    const process = view.container.querySelector('[data-process-panel="running"]') as HTMLDetailsElement
+    expect(process.open).toBe(true)
+    expect(within(process).getByText('Deep diving...')).toBeTruthy()
+  })
+
+  it('folds a recovered Tool failure after a later final answer', () => {
+    const failedTool = { ...toolResult(3, 'recoverable'), isError: true, turn: 2 } as ToolResultNode
+    const h = makeHarness({
+      nodes: [user(1, 'finish despite one failed read'), assistant(2, 'Checking alternatives.', 2)],
+      runningCalls: [runningCall('recoverable')],
+      turnTimings: new Map([[2, { startTime: 1_000 }]]),
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+
+    act(() => {
+      h.set({
+        nodes: [
+          user(1, 'finish despite one failed read'),
+          assistant(2, 'Checking alternatives.', 2),
+          failedTool,
+          assistant(4, 'Recovered and completed successfully.', 2),
+        ],
+        runningCalls: [],
+        turnTimings: new Map([[2, { startTime: 1_000, endTime: 5_000 }]]),
+        turnEnds: new Map([[2, 5]]),
+        running: false,
+      })
+    })
+
+    const settled = view.container.querySelector('[data-process-panel="done"]') as HTMLDetailsElement
+    expect(settled.open).toBe(false)
+    expect(view.container.querySelector('[data-process-panel="warning"]')).toBeNull()
+    expect(view.getByText('Recovered and completed successfully.').closest('[data-process-panel]')).toBeNull()
+    expect(view.getByTestId('tool-seat-recoverable').closest('[data-process-panel]')).toBe(settled)
+    fireEvent.click(settled.querySelector('[data-process-disclosure]') as HTMLElement)
+    expect(view.getByTestId('tool-seat-recoverable')).toBeTruthy()
+  })
+
+  it('keeps an unrecovered Tool failure expanded when no final answer follows', () => {
+    const failedTool = { ...toolResult(3, 'terminal'), isError: true, turn: 1 } as ToolResultNode
+    const h = makeHarness({
+      nodes: [user(1, 'read this image'), failedTool],
+      turnTimings: new Map([[1, { startTime: 1_000, endTime: 4_000 }]]),
+      turnEnds: new Map([[1, 4]]),
+      running: false,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    const warning = view.container.querySelector('[data-process-panel="warning"]') as HTMLDetailsElement
+    expect(warning.open).toBe(true)
+    expect(view.getByTestId('tool-seat-terminal').closest('[data-process-panel]')).toBe(warning)
   })
 
   it('keeps a failed turn expanded so its actionable error is immediately visible', () => {

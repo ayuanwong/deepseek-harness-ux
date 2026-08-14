@@ -229,7 +229,12 @@
   padding-left: 14px;
   overflow-y: auto;
   border-left: 1px solid var(--dsw-alias-border-l2);
-  overscroll-behavior: contain;
+  /* The technical log owns its gesture while it is height-capped. `none`
+     also suppresses platform overscroll effects; the non-passive wheel guard
+     in ProcessPanel covers engines that hand a large tick's remainder to the
+     ancestor despite this boundary. */
+  overscroll-behavior-y: none;
+  overflow-anchor: none;
   scrollbar-width: thin;
 }
 

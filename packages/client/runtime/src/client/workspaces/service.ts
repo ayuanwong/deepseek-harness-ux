@@ -55,6 +55,8 @@ export class WorkspaceRuntime implements IWorkspaces {
   private readonly manager: WorkspaceManager
   /** In-flight blank-session creates keyed by workspace (connectWorkspace coalescing). */
   private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
+  /** Coalesces repeated clicks on the Ungrouped new-session affordance. */
+  private connectingUngrouped: Promise<SessionId> | undefined
   /** Guards the runtime-owned one-shot initial-selection subscription. */
   private initialSelectionStarted = false
 
@@ -188,6 +190,35 @@ export class WorkspaceRuntime implements IWorkspaces {
     void this.connectWorkspace(target).then(
       (sessionId) => { this.sessions.open(sessionId) },
       (reason: unknown) => { console.warn('new session failed:', reason) },
+    )
+  }
+
+  /**
+   * Start a New Session outside every Workspace account. Unlike
+   * {@link startSession}, this is an explicit destination: it never inherits
+   * the current or recent Workspace. An already selected ungrouped blank is
+   * reused, and concurrent creates are coalesced so a double click cannot
+   * leave hidden blank sessions behind.
+   */
+  startUngroupedSession(): void {
+    const workspace = this.list.getSnapshot()
+    const sessions = this.sessions.list.getSnapshot()
+    const current = sessions.current
+    const currentSummary = current === undefined ? undefined : sessions.byId[current]
+    const accounted = current === undefined
+      ? false
+      : workspace.items.some(item => item.sessionIds.includes(current))
+    if (currentSummary?.blank === true && !accounted
+      && !workspace.archivedSessionIds.includes(currentSummary.id)) {
+      this.sessions.open(currentSummary.id)
+      return
+    }
+    const attempt = this.connectingUngrouped ?? this.sessions.create()
+      .finally(() => { this.connectingUngrouped = undefined })
+    this.connectingUngrouped = attempt
+    void attempt.then(
+      (sessionId) => { this.sessions.open(sessionId) },
+      (reason: unknown) => { console.warn('new ungrouped session failed:', reason) },
     )
   }
 

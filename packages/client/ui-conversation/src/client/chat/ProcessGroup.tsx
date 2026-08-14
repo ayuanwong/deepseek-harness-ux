@@ -450,6 +450,18 @@ function nodeWarning(node: ChatNode): boolean {
   }
 }
 
+/** A recovered Tool/command failure remains inspectable in Run details but
+ * must not keep a successfully answered Turn expanded as a terminal warning. */
+function terminalProcessWarning(nodes: readonly ChatNode[], closingKey: string | undefined): boolean {
+  if (nodes.some(node => node.kind === 'turn-error')) return true
+  const closing = closingKey === undefined ? undefined : nodes.find(node => node.key === closingKey)
+  // A user stop/interrupt is a terminal outcome, not a recovered intermediate
+  // Tool failure. Keep its partial answer and actionable run details open.
+  if (closing?.kind === 'assistant-step' && closing.data.status === 'interrupted') return true
+  if (closingKey !== undefined) return false
+  return nodes.some(nodeWarning)
+}
+
 function processLogLines(
   nodes: readonly ChatNode[], headline: ProcessHeadline | null, userQueries: readonly string[], t: ChatViewSlotProps['t'],
 ): ProcessLogLine[] {
@@ -662,7 +674,7 @@ export const ProcessGroup = memo(function ProcessGroup({
       }]
       : refined
   }, [explicitAfterRefinement, headline, lines, refinedStages])
-  const warning = nodes.some(nodeWarning)
+  const warning = terminalProcessWarning(nodes, closingKey)
   const processState = live ? 'running' : warning ? 'warning' : 'done'
   const startTime = turnLocation?.start?.time ?? null
   const runMs = turnLocation?.start === undefined || turnLocation.end === undefined

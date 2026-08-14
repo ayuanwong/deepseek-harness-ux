@@ -15,10 +15,15 @@ export type SessionGroupBy = 'workspace' | 'flat'
 /** Session order: user-arranged only, or user-arranged plus activity promotion. */
 export type SessionOrderBy = 'manual' | 'updated'
 
+/** One-time migration marker for the recency-first sidebar default. */
+export const RECENCY_DEFAULT_VERSION = 1
+
 /** Workspace browser viewing state persisted across surface remounts and reloads. */
 type WorkspaceViewState = {
   groupBy: SessionGroupBy
   orderBy: SessionOrderBy
+  /** Missing on pre-recency persisted state; the browser migrates it once. */
+  recencyDefaultVersion: number
   /** Explicit zero-or-five-session state keyed by Workspace group identity. */
   groupExpansion: Record<string, boolean>
   /** Shared editable order per Workspace group plus the browser-local flat-list account. */
@@ -32,6 +37,7 @@ type WorkspaceViewState = {
  * return type); drift fails assignability at the defineStore call.
  */
 type WorkspaceViewActions = {
+  adoptRecencyDefault: (draft: WorkspaceViewState) => void
   setGroupBy: (draft: WorkspaceViewState, mode: SessionGroupBy) => void
   setOrderBy: (draft: WorkspaceViewState, mode: SessionOrderBy) => void
   setGroupExpanded: (draft: WorkspaceViewState, key: string, expanded: boolean) => void
@@ -53,13 +59,23 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
   return defineStore({
     init: (): WorkspaceViewState => ({
       groupBy: 'workspace',
-      orderBy: 'manual',
+      orderBy: 'updated',
+      recencyDefaultVersion: RECENCY_DEFAULT_VERSION,
       groupExpansion: {},
       sessionOrderByAccount: {},
       sessionUpdatedAtByAccount: {},
     }),
     persist: 'dsh.workspace.view.v4',
     actions: {
+      adoptRecencyDefault: (d) => {
+        d.orderBy = 'updated'
+        d.recencyDefaultVersion = RECENCY_DEFAULT_VERSION
+        // The former default was manual, so its persisted sequence is not a
+        // valid recency baseline. Preserve grouping/expansion preferences but
+        // let each visible account rebuild newest-first from live timestamps.
+        d.sessionOrderByAccount = {}
+        d.sessionUpdatedAtByAccount = {}
+      },
       setGroupBy: (d, mode: SessionGroupBy) => { d.groupBy = mode },
       setOrderBy: (d, mode: SessionOrderBy) => { d.orderBy = mode },
       setGroupExpanded: (d, key: string, expanded: boolean) => { d.groupExpansion[key] = expanded },

@@ -20,7 +20,9 @@ Chat 业务行是彼此独立的注册表贡献，不是封闭的内建联合。
 
 Think 行默认保持折叠，并在不展开思维链的情况下暴露实时推理（reasoning）吞吐：当推理块是流式输出尾部时，摘要从结算后的首行切换到最新的非空行，其单行滚动区会随每个 delta 追到行内末端。展开该行会移除移动摘要，让完整推理进入普通页面流，因此页面阅读不会与内部跟随器争夺滚动；结算后恢复左对齐的稳定首行摘要（[决策](../../../.agents/notes/implemented/feature/2026-08-02-web-thinking-tail-scroll.md)）。
 
-在 Chat 消息流层，每个权威轮次都会基于这份稳定 Node 顺序投影为收尾答案之前的一个过程展开项。轮次运行时，外层过程保持展开，保留 `Deep diving...` 动效、步骤数与耗时，并始终显示一个紧凑语义阶段。安全的本地任务对象标题负责即时回退；独立且仅影响展示的服务可以把已记录的推理、Todo 与 Tool 活动精炼成只向前推进的阶段轨迹，但不会改变主 Agent 请求或答案。通用状态文案、用户问题复述、命令、路径、单独的 Tool 名称和答案元数据都不能成为标题。轮次中的 Assistant 说明只作为阶段结果渲染一次，包括问题或审批接管输入区的等待阶段；已注册的原始 Node renderer 则继续位于内层默认折叠的“运行详情”中，可按需检查。只有权威的轮次关闭边界才会折叠外层过程；收尾 Assistant 继续作为过程外的一等消息（[决策](../../../.agents/notes/implemented/feature/2026-08-13-web-turn-process-presentation.md)）。
+在 Chat 消息流层，每个权威轮次都会基于这份稳定 Node 顺序投影为收尾答案之前的一个过程展开项。会话报告任务仍在运行，或仍有待回答问题或待审批请求时，外层过程保持展开，保留 `Deep diving...` 动效、步骤数与耗时，并始终显示一个紧凑语义阶段。安全的本地任务对象标题负责即时回退；独立且仅影响展示的服务可以把已记录的推理、Todo 与 Tool 活动精炼成只向前推进的阶段轨迹，但不会改变主 Agent 请求或答案。通用状态文案、用户问题复述、命令、路径、单独的 Tool 名称和答案元数据都不能成为标题。轮次中的 Assistant 说明只作为阶段结果渲染一次，包括问题或审批接管输入区的等待阶段；已注册的原始 Node renderer 则继续位于内层默认折叠的“运行详情”中，可按需检查。会话空闲且没有待处理交互时，即使持久化 `turn/end` 仍在到达途中，过程也会结算并折叠；收尾 Assistant 继续作为过程外的一等消息，运行时则在后台刷新日志尾部。已恢复的中途 Tool 或命令错误仍保留在“运行详情”中，但不会强制已结算过程展开；终止轮次的错误或未恢复失败仍保持展开（[决策](../../../.agents/notes/implemented/feature/2026-08-13-web-turn-process-presentation.md)）。
+
+运行中的“运行详情”被限高时，其行区域独占落在其中的每一次纵向滚轮手势；滚到边缘也不会带动背后的会话。会话滚动容器同时关闭浏览器原生滚动锚定，因为阅读锚点与吸底已由 ChatView 自己负责。由此技术行在流式增加、展开或收缩时只有一套位置所有权，Windows 精密滚轮路径下 sticky 输入区也始终留在视口底部（[决策](../../../.agents/notes/implemented/bug-fix/2026-08-14-live-process-scroll-containment.md)）。
 
 聊天视图保留工具的消息流位置，但委托其展示。每个已排序的 `tool-call` Conversation Node 都通过 `conversation.chat.node` 的同名 key 分发；详情壳层则通过 `conversation.details.tool` 传递当前选中的调用。组装后的 Web bundle 为该 Chat Node key 注册 [`ui-tool`](../ui-tool/README.md)，由后者渲染运行时已投影的递归 root/child 树，并负责按名称分发、通用展示和 render-intent 卡片；只有详情席位会在该 renderer 缺席时保留 raw-result fallback。
 

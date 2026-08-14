@@ -29,6 +29,11 @@ export interface IWorkspaces {
    */
   startSession(workspaceId?: WorkspaceId): void
   /**
+   * Start a New Session with no Workspace account. This explicit action never
+   * inherits the current or recent Workspace.
+   */
+  startUngroupedSession(): void
+  /**
    * Register an existing path as a Workspace.
    * @param input - the Host create payload.
    * @returns the created or idempotently resolved Workspace.

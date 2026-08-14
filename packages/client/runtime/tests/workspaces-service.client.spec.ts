@@ -442,6 +442,34 @@ describe('WorkspaceRuntime', () => {
     expect(clear).toHaveBeenCalledOnce()
   })
 
+  it('starts an ungrouped session without inheriting a current or recent Workspace', async () => {
+    const ctx = new Context()
+    const api = new FakeApiClient()
+    const sessions = new SessionRuntime(ctx, api, fakeRemote())
+    const workspaces = new WorkspaceRuntime(ctx, api, sessions)
+    api.onWorkspaceList = () => Promise.resolve(ok({
+      items: [workspace('recent-home', [sid('accounted')])] as never[],
+    }))
+    api.onList = () => Promise.resolve(ok({ items: [
+      { sessionId: sid('accounted'), updatedAt: 2, running: false, blank: false },
+    ] as never[] }))
+    api.onCreate = () => Promise.resolve(ok({ sessionId: sid('loose-new') }))
+    await Promise.all([workspaces.refresh(), sessions.refresh()])
+    sessions.open(sid('accounted'))
+
+    workspaces.startUngroupedSession()
+    await vi.waitFor(() => { expect(sessions.list.getSnapshot().current).toBe('loose-new') })
+    expect(api.callsOf('session.create')).toEqual([{}])
+    expect(workspaces.list.getSnapshot().items[0]?.sessionIds).toEqual(['accounted'])
+
+    // A second click while the ungrouped blank is current reuses it instead
+    // of minting another invisible placeholder.
+    workspaces.startUngroupedSession()
+    await Promise.resolve()
+    expect(api.callsOf('session.create')).toEqual([{}])
+    expect(sessions.list.getSnapshot().current).toBe('loose-new')
+  })
+
   it('archives a session, projects the set from the response, list, and frame, and clears only the current one', async () => {
     const ctx = new Context()
     const api = new FakeApiClient()

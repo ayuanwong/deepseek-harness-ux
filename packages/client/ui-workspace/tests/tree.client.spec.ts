@@ -395,7 +395,7 @@ describe('createWorkspaceViewStore', () => {
   it('stores grouping, ordering, Workspace expansion, and recent-session view order', () => {
     const store = createWorkspaceViewStore().create()
     expect(store.getSnapshot().groupBy).toBe('workspace')
-    expect(store.getSnapshot().orderBy).toBe('manual')
+    expect(store.getSnapshot().orderBy).toBe('updated')
     store.actions.setGroupBy('flat')
     store.actions.setOrderBy('updated')
     store.actions.setGroupExpanded('alpha', true)

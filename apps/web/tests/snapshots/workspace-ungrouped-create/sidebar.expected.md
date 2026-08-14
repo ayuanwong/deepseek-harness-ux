@@ -1,0 +1,8 @@
+- tree "Sessions":
+  - treeitem "Ungrouped New session in Ungrouped" [expanded]:
+    - img
+    - text: Ungrouped
+    - button "New session in Ungrouped":
+      - img
+  - treeitem "New Session" [selected]
+  - treeitem "{{workspace}} 1min"

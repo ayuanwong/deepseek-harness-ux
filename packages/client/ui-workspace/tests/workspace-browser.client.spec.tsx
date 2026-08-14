@@ -68,6 +68,7 @@ function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
     useStore: bindSnapshotSelector(store),
     actions: store.actions,
     startSession: vi.fn(),
+    startUngroupedSession: vi.fn(),
     open: vi.fn(),
     searchSessions: vi.fn(async () => ({ items: [], hasMore: false })),
     searchResultLimit: 20,
@@ -95,6 +96,33 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('migrates the former manual default to newest-first without dropping grouping preferences', async () => {
+    localStorage.setItem('dsh.workspace.view.v4', JSON.stringify({
+      groupBy: 'workspace',
+      orderBy: 'manual',
+      groupExpansion: { alpha: true },
+      sessionOrderByAccount: { alpha: ['older', 'newer'] },
+      sessionUpdatedAtByAccount: { alpha: { older: 1, newer: 2 } },
+    }))
+    const b = mount({
+      useSessions: hook(sessionState([summary('older', 1), summary('newer', 3)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['older', 'newer'])])),
+    })
+
+    await waitFor(() => {
+      expect(b.store.getSnapshot()).toMatchObject({
+        orderBy: 'updated',
+        recencyDefaultVersion: 1,
+        groupExpansion: { alpha: true },
+        sessionOrderByAccount: { alpha: ['newer', 'older'] },
+      })
+    })
+    expect(screen.getAllByRole('treeitem').slice(1).map(row => row.textContent)).toEqual([
+      expect.stringContaining('newer'),
+      expect.stringContaining('older'),
+    ])
+  })
+
   it('prunes deleted Workspace view state only after the Workspace baseline is ready', async () => {
     const pending = {
       ...workspaceState([]),
@@ -135,7 +163,7 @@ describe('WorkspaceBrowser', () => {
       '按工作区', '单列表', '手动排序', '最近更新',
     ])
     expect(screen.getByRole('menuitem', { name: '按工作区' }).querySelector('svg')).toBeTruthy()
-    expect(screen.getByRole('menuitem', { name: '手动排序' }).querySelector('svg')).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: '最近更新' }).querySelector('svg')).toBeTruthy()
     fireEvent.click(screen.getByRole('menuitem', { name: '单列表' }))
     // Store-driven flip: title changes, rows flatten newest-first, headers gone.
     expect(b.store.getSnapshot().groupBy).toBe('flat')
@@ -170,6 +198,7 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaces),
       insertSessionBefore,
     })
+    act(() => { b.store.actions.setOrderBy('manual') })
     fireEvent.click(screen.getByRole('button', { name: '视图选项' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '单列表' }))
     await waitFor(() => {
@@ -387,18 +416,18 @@ describe('WorkspaceBrowser', () => {
     expect(startSession).toHaveBeenCalledWith(wid('alpha'))
   })
 
-  it('auto-expands the Ungrouped bucket for a loose current session; its header has no menu and its ＋ is inert', () => {
-    const startSession = vi.fn()
+  it('auto-expands the Ungrouped bucket and starts an explicitly ungrouped session from its ＋', () => {
+    const startUngroupedSession = vi.fn()
     mount({
       useSessions: hook(sessionState([summary('loose', 1)], { current: sid('loose') })),
       useWorkspaces: hook(workspaceState([workspace('alpha', [])])),
-      startSession,
+      startUngroupedSession,
     })
     // The loose session's group is UNGROUPED_KEY: expanded by the effect.
     expect(screen.getByText('loose')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '工作区“未分组”的操作' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '在“未分组”中新建会话' }))
-    expect(startSession).not.toHaveBeenCalled()
+    expect(startUngroupedSession).toHaveBeenCalledOnce()
   })
 
   it('keeps an already-expanded group when the selection moves within it', () => {
@@ -805,11 +834,12 @@ describe('WorkspaceBrowser', () => {
   it('drag reorder reports the anchor to insertSessionBefore and skips no-op drops', () => {
     const insertSessionBefore = vi.fn(async () => {})
     const sessions = sessionState([summary('one', 3), summary('two', 2), summary('three', 1)])
-    mount({
+    const b = mount({
       useSessions: hook(sessions),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two', 'three'])])),
       insertSessionBefore,
     })
+    act(() => { b.store.actions.setOrderBy('manual') })
     fireEvent.click(screen.getByText('alpha'))
     const rows = screen.getAllByRole('treeitem').slice(1) // drop the group header
     const [one, , three] = rows as [HTMLElement, HTMLElement, HTMLElement]
@@ -845,6 +875,7 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([])),
       insertSessionBefore,
     })
+    act(() => { b.store.actions.setOrderBy('manual') })
     fireEvent.click(screen.getByText('未分组'))
 
     const dragAfter = (sourceTitle: string, targetTitle: string): void => {
@@ -894,6 +925,7 @@ describe('WorkspaceBrowser', () => {
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'])])),
       insertSessionBefore,
     })
+    act(() => { b.store.actions.setOrderBy('manual') })
     fireEvent.click(screen.getByText('alpha'))
     const one = screen.getByText('one').closest('[role="treeitem"]') as HTMLElement
     fireEvent.dragStart(one, { dataTransfer: dragData() })
@@ -911,11 +943,12 @@ describe('WorkspaceBrowser', () => {
   it('drag end without a drop clears markers; bottom-half drop appends past the last row', () => {
     const insertSessionBefore = vi.fn(async () => {})
     const sessions = sessionState([summary('one', 2), summary('two', 1)])
-    mount({
+    const b = mount({
       useSessions: hook(sessions),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'])])),
       insertSessionBefore,
     })
+    act(() => { b.store.actions.setOrderBy('manual') })
     fireEvent.click(screen.getByText('alpha'))
     const [one, two] = screen.getAllByRole('treeitem').slice(1) as [HTMLElement, HTMLElement]
     two.getBoundingClientRect = () => ({
@@ -937,11 +970,12 @@ describe('WorkspaceBrowser', () => {
 
   it('accepts a document-level drop and commits the last Session marker on drag end', () => {
     const insertSessionBefore = vi.fn(async () => {})
-    mount({
+    const b = mount({
       useSessions: hook(sessionState([summary('one', 2), summary('two', 1)])),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'])])),
       insertSessionBefore,
     })
+    act(() => { b.store.actions.setOrderBy('manual') })
     fireEvent.click(screen.getByText('alpha'))
     const [one, two] = screen.getAllByRole('treeitem').slice(1) as [HTMLElement, HTMLElement]
     two.getBoundingClientRect = () => ({
@@ -962,11 +996,12 @@ describe('WorkspaceBrowser', () => {
     try {
       const insertSessionBefore = vi.fn(async () => { throw new Error('stale anchor') })
       const sessions = sessionState([summary('one', 2), summary('two', 1)])
-      mount({
+      const b = mount({
         useSessions: hook(sessions),
         useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'])])),
         insertSessionBefore,
       })
+      act(() => { b.store.actions.setOrderBy('manual') })
       fireEvent.click(screen.getByText('alpha'))
       const [one, two] = screen.getAllByRole('treeitem').slice(1) as [HTMLElement, HTMLElement]
       two.getBoundingClientRect = () => ({

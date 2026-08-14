@@ -5,6 +5,36 @@ import a11yCss from './accessibility.module.css'
 import { formatRunDuration } from './message-chrome.ts'
 import css from './ProcessPanel.module.css'
 
+const WHEEL_LINE_PX = 16
+
+/**
+ * The live technical log is a bounded scrollport while a turn is running.
+ * Consume its vertical wheel gesture ourselves so one large Windows wheel
+ * tick cannot finish the inner scroll and hand its remainder to the
+ * conversation scrollport behind it.
+ */
+function ProcessTechnicalDetails({ children }: { children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const element = scrollRef.current
+    /* v8 ignore next -- the ref is attached by the component's only render path. */
+    if (element === null) return
+    const onWheel = (event: globalThis.WheelEvent): void => {
+      if (event.deltaY === 0 || element.scrollHeight <= element.clientHeight + 1) return
+      const scale = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? WHEEL_LINE_PX
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? element.clientHeight : 1
+      const limit = Math.max(0, element.scrollHeight - element.clientHeight)
+      event.preventDefault()
+      event.stopPropagation()
+      element.scrollTop = Math.max(0, Math.min(limit, element.scrollTop + event.deltaY * scale))
+    }
+    element.addEventListener('wheel', onWheel, { passive: false })
+    return () => { element.removeEventListener('wheel', onWheel) }
+  }, [])
+  return <div ref={scrollRef} className={css.liveDetails}>{children}</div>
+}
+
 /** One concise, presentation-only activity line derived from the existing transcript. */
 export interface ProcessLogLine {
   key: string
@@ -238,7 +268,7 @@ export function ProcessPanel({
               <IconChevronDownOutline14 className={css.liveChevron} />
               <span>{t('chat.process.details')}</span>
             </summary>
-            <div className={css.liveDetails}>{children}</div>
+            <ProcessTechnicalDetails>{children}</ProcessTechnicalDetails>
           </details>
         )}
       </div>

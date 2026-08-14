@@ -200,9 +200,10 @@ function presentChatNodes(
   timeline: ConversationTimelineSnapshot,
   seenOpenTurns: ReadonlySet<number>,
   rememberedNodeTurns: ReadonlyMap<string, number>,
-  running: boolean,
+  processActive: boolean,
 ): PresentationItem[] {
   const closing = closingByTurn(order, nodeStore)
+  const activeTurn = processActive ? latestOpenTurn(timeline) : null
   const presented: PresentationItem[] = []
   // Keep the accumulator in an object because `flush` mutates it from a
   // closure; this also keeps control-flow narrowing truthful across loops.
@@ -215,21 +216,41 @@ function presentChatNodes(
     const group = state.pending
     state.pending = null
     const status = timeline.turns.get(group.turn)?.status
-    const live = status !== 'closed' && seenOpenTurns.has(group.turn)
+    const live = status !== 'closed' && activeTurn === group.turn && seenOpenTurns.has(group.turn)
+    // The Host running bit is the authoritative activity signal. If it has
+    // already settled but the tail turn/end is still in flight, keep the last
+    // settled Assistant answer outside the now-collapsed Process instead of
+    // hiding it with the stale open Turn.
+    const trailingKey = group.nodeKeys.at(-1)
+    const trailingNode = trailingKey === undefined
+      ? undefined
+      : nodeStore.get(trailingKey) as ChatNode | undefined
+    const provisionalClosingKey = group.closingKey === undefined
+      && status !== 'closed'
+      && !processActive
+      && trailingNode?.kind === 'assistant-step'
+      && trailingNode.data.status === 'settled'
+      && trailingNode.data.blocks.some(block => block.kind === 'text' && block.text.trim() !== '')
+      ? trailingKey
+      : undefined
+    const closingKey = group.closingKey ?? provisionalClosingKey
+    const processNodeKeys = provisionalClosingKey === undefined
+      ? group.nodeKeys
+      : group.nodeKeys.filter(key => key !== provisionalClosingKey)
     // A completed one-line answer with no reasoning, Tool or supporting
     // narration needs no empty process disclosure.
-    if (group.nodeKeys.length > 0 || live || seenOpenTurns.has(group.turn)) {
+    if (processNodeKeys.length > 0 || live || seenOpenTurns.has(group.turn)) {
       presented.push({
         kind: 'process', key: `process:${group.turn}`, turn: group.turn,
-        nodeKeys: group.nodeKeys, closingKey: group.closingKey, live,
+        nodeKeys: processNodeKeys, ...(closingKey === undefined ? {} : { closingKey }), live,
         // The process wrapper owns its own navigation identity. Reusing a
         // child Tool/Assistant key here creates duplicate scroll anchors and
         // makes long-history restoration land on whichever duplicate wins.
         anchorKey: `process:${group.turn}`,
       })
     }
-    if (group.closingKey !== undefined) {
-      presented.push({ kind: 'node', key: group.closingKey, nodeKey: group.closingKey })
+    if (closingKey !== undefined) {
+      presented.push({ kind: 'node', key: closingKey, nodeKey: closingKey })
     }
   }
 
@@ -260,7 +281,7 @@ function presentChatNodes(
   }
   flush()
 
-  if (running && !presented.some(item => item.kind === 'process' && item.live)) {
+  if (processActive && !presented.some(item => item.kind === 'process' && item.live)) {
     const turn = latestOpenTurn(timeline)
     presented.push({
       kind: 'process', key: `process:${turn ?? 'pending'}`, turn,
@@ -285,6 +306,8 @@ export function ChatView({
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
   const running = useSession(s => s.running)
+  const hasPendingInteraction = useSession(s => s.pending.length > 0)
+  const processActive = running || hasPendingInteraction
   const openState = useSession(s => s.openState)
   const openError = useSession(s => s.openError)
   const hasMore = useSession(s => s.hasMore)
@@ -310,7 +333,7 @@ export function ChatView({
     seenOpenTurnsRef.current.clear()
     rememberedNodeTurnsRef.current.clear()
   }
-  if (running) {
+  if (processActive) {
     for (const [turn, location] of timeline.turns) {
       if (location.status === 'open') seenOpenTurnsRef.current.add(turn)
     }
@@ -323,9 +346,9 @@ export function ChatView({
   }
   const presentation = useMemo(
     () => presentChatNodes(
-      order, nodeStore, timeline, seenOpenTurnsRef.current, rememberedNodeTurnsRef.current, running,
+      order, nodeStore, timeline, seenOpenTurnsRef.current, rememberedNodeTurnsRef.current, processActive,
     ),
-    [nodeStore, order, running, timeline],
+    [nodeStore, order, processActive, timeline],
   )
 
   const listRef = useRef<HTMLDivElement | null>(null)
