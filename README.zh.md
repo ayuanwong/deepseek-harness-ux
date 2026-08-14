@@ -95,9 +95,9 @@ pnpm run doc-sync
 
 ## 友情链接
 
-- [dsh-tianshu-tui](https://github.com/huiliyi37/dsh-tianshu-tui)
-- [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI)
-- [DSH Find](https://dshfind.com)
+- [dsh-tianshu-tui](https://github.com/huiliyi37/dsh-tianshu-tui)：DeepSeek Harness 的交互式终端 UI 插件，集成 TDD、证据门、视觉和代码智能等工作流。
+- [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI)：Claude Code 风格的 DSH 全屏终端 UI，提供实时任务状态、流式思考、回滚以及上下文与 TPS 指标。
+- [DSH Find](https://dshfind.com)：面向 DeepSeek Harness 的学习与分享社区，汇集论文精读、插件超市和用户排名。
 
 ## 许可证与归属
 
