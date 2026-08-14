@@ -191,6 +191,29 @@ function latestOpenTurn(timeline: ConversationTimelineSnapshot): number | null {
 }
 
 /**
+ * Reuse the previous nodeKeys array for a turn when its key set is unchanged.
+ * presentChatNodes runs on every streamed chunk (its memo deps move with the
+ * node store), so without this the ProcessGroup memo's shallow props compare
+ * would fail for every turn on every chunk and re-render the whole process
+ * subtree — however far the update landed from it.
+ * @param turn - the process turn the keys belong to (cache key; -1 covers the
+ *   pre-turn live placeholder).
+ * @param keys - the newly computed key set.
+ * @param cache - instance-owned cache, cleared when the session changes.
+ * @returns `keys` itself when the cached set matches, else a fresh copy the
+ *   cache now holds.
+ */
+function stableNodeKeysFor(turn: number, keys: readonly string[], cache: Map<number, string[]>): string[] {
+  const previous = cache.get(turn)
+  if (previous !== undefined && previous.length === keys.length && previous.every((key, index) => key === keys[index])) {
+    return previous
+  }
+  const next = [...keys]
+  cache.set(turn, next)
+  return next
+}
+
+/**
  * Presentation-only grouping over the stable final Node order. The Node store,
  * turn data, Tool lifecycles and execution strategy remain untouched.
  */
@@ -201,6 +224,7 @@ function presentChatNodes(
   seenOpenTurns: ReadonlySet<number>,
   rememberedNodeTurns: ReadonlyMap<string, number>,
   processActive: boolean,
+  stableNodeKeys: Map<number, string[]>,
 ): PresentationItem[] {
   const closing = closingByTurn(order, nodeStore)
   const activeTurn = processActive ? latestOpenTurn(timeline) : null
@@ -240,9 +264,10 @@ function presentChatNodes(
     // A completed one-line answer with no reasoning, Tool or supporting
     // narration needs no empty process disclosure.
     if (processNodeKeys.length > 0 || live || seenOpenTurns.has(group.turn)) {
+      const stableKeys = stableNodeKeysFor(group.turn, processNodeKeys, stableNodeKeys)
       presented.push({
         kind: 'process', key: `process:${group.turn}`, turn: group.turn,
-        nodeKeys: processNodeKeys, ...(closingKey === undefined ? {} : { closingKey }), live,
+        nodeKeys: stableKeys, ...(closingKey === undefined ? {} : { closingKey }), live,
         // The process wrapper owns its own navigation identity. Reusing a
         // child Tool/Assistant key here creates duplicate scroll anchors and
         // makes long-history restoration land on whichever duplicate wins.
@@ -285,7 +310,7 @@ function presentChatNodes(
     const turn = latestOpenTurn(timeline)
     presented.push({
       kind: 'process', key: `process:${turn ?? 'pending'}`, turn,
-      nodeKeys: [], live: true, anchorKey: `process:${turn ?? 'pending'}`,
+      nodeKeys: stableNodeKeysFor(turn ?? -1, [], stableNodeKeys), live: true, anchorKey: `process:${turn ?? 'pending'}`,
     })
   }
   return presented
@@ -314,14 +339,25 @@ export function ChatView({
   const loadingOlder = useSession(s => s.loadingOlder)
   const selectedCallId = useStore(s => s.selection?.callId)
 
+  /** Instance-owned reference caches that pin presentation props across the
+   *  streamed-chunk re-runs whose memo deps move with the node store. Cleared
+   *  together with the other per-session refs below. */
+  const userQueriesRef = useRef<readonly string[]>([])
+  const stableNodeKeysRef = useRef<Map<number, string[]>>(new Map())
+
   const pendingSteering = useMemo(
     () => inbox.filter(item => item.placement === 'steering'),
     [inbox],
   )
-  const userQueries = useMemo(
-    () => currentTaskQueries(order, nodeStore, pendingSteering),
-    [nodeStore, order, pendingSteering],
-  )
+  const userQueries = useMemo(() => {
+    const next = currentTaskQueries(order, nodeStore, pendingSteering)
+    const previous = userQueriesRef.current
+    if (previous.length === next.length && previous.every((query, index) => query === next[index])) {
+      return previous
+    }
+    userQueriesRef.current = next
+    return next
+  }, [nodeStore, order, pendingSteering])
   /** Remember unfinished turns so the stable Process parent survives both the
    * running-call → settled-node handoff and pauses for user input. `running`
    * may be false during a question/approval even though the Turn is still open. */
@@ -332,6 +368,8 @@ export function ChatView({
     groupingSessionRef.current = sessionId
     seenOpenTurnsRef.current.clear()
     rememberedNodeTurnsRef.current.clear()
+    stableNodeKeysRef.current.clear()
+    userQueriesRef.current = []
   }
   if (processActive) {
     for (const [turn, location] of timeline.turns) {
@@ -347,6 +385,7 @@ export function ChatView({
   const presentation = useMemo(
     () => presentChatNodes(
       order, nodeStore, timeline, seenOpenTurnsRef.current, rememberedNodeTurnsRef.current, processActive,
+      stableNodeKeysRef.current,
     ),
     [nodeStore, order, processActive, timeline],
   )
