@@ -40,13 +40,25 @@ export function sdkEnvironmentOverlay(
 }
 
 /**
+ * Quote one argument for cmd.exe's reparsing of the `/c` command line.
+ * The batch-shim tail is not exec'd as an argv array — cmd re-parses it, so a
+ * bare argument containing a metacharacter (& | ^ < >) could splice into the
+ * command line. The pinned SDK currently supplies fixed flag arguments, but
+ * quoting every argument removes the upstream assumption.
+ */
+function quoteCmdArg(argument: string): string {
+  return `"${argument.replace(/"/g, '""')}"`
+}
+
+/**
  * Translate one official SDK spawn request to the shared process owner.
  * @param options - command, arguments, workspace, environment, and forwarded signal from the SDK.
  * @param graceMs - process-tree termination grace.
  * @param platform - host platform selecting the Windows batch-shim boundary.
  * @returns the fully explicit shared subprocess request.
- * @remarks The batch-shim path quotes only the resolved executable. The pinned SDK
- * supplies fixed flag arguments without cmd metacharacters; cmd reparses that tail.
+ * @remarks The batch-shim path quotes the resolved executable and every
+ * argument; cmd still re-parses the tail (that is the shim's point), but each
+ * argument arrives as one quoted unit.
  */
 export function claudeSpawnSpec(
   options: SpawnOptions,
@@ -60,7 +72,7 @@ export function claudeSpawnSpec(
   const batchShim = platform === 'win32' && (extension === '.cmd' || extension === '.bat')
   const env = sdkEnvironmentOverlay(options.env)
   const argv = batchShim
-    ? ['cmd.exe', '/d', '/v:off', '/s', '/c', `%${WINDOWS_BATCH_EXECUTABLE_ENV}%`, ...options.args]
+    ? ['cmd.exe', '/d', '/v:off', '/s', '/c', `%${WINDOWS_BATCH_EXECUTABLE_ENV}%`, ...options.args.map(quoteCmdArg)]
     : [options.command, ...options.args]
   if (batchShim) env[WINDOWS_BATCH_EXECUTABLE_ENV] = `"${options.command}"`
   return {

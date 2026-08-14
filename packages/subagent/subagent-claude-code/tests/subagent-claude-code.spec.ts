@@ -465,11 +465,24 @@ describe('official spawn projection', () => {
 
     expect(spec.argv).toEqual([
       'cmd.exe', '/d', '/v:off', '/s', '/c', '%DSH_CLAUDE_CODE_EXECUTABLE%',
-      '--output-format', 'stream-json',
+      '"--output-format"', '"stream-json"',
     ])
     expect(spec.env).toEqual(expect.objectContaining({
       DSH_CLAUDE_CODE_EXECUTABLE: `"${command}"`,
     }))
+  })
+
+  it('quotes every shim argument so cmd metacharacters cannot splice into the command line', () => {
+    const command = String.raw`C:\Program Files\Claude\claude.cmd`
+    const spec = claudeSpawnSpec(sdkSpawnOptions({
+      command,
+      args: ['--flag', 'a&b', 'say "hi"'],
+    }), 7, 'win32')
+
+    expect(spec.argv).toEqual([
+      'cmd.exe', '/d', '/v:off', '/s', '/c', '%DSH_CLAUDE_CODE_EXECUTABLE%',
+      '"--flag"', '"a&b"', '"say ""hi"""',
+    ])
   })
 
   it('projects streams, exit facts, listeners, and idempotent tree termination', async () => {
