@@ -93,6 +93,12 @@ pnpm run hygiene
 pnpm run doc-sync
 ```
 
+## Community links
+
+- [dsh-tianshu-tui](https://github.com/huiliyi37/dsh-tianshu-tui) — An interactive terminal UI plugin for DeepSeek Harness with TDD, evidence gates, vision, and code intelligence workflows.
+- [dsh-TUI](https://github.com/ccch1mneyyy/dsh-TUI) — A Claude Code-style full-screen terminal UI for DSH with live task status, streamed reasoning, rollback, and context/TPS metrics.
+- [DSH Find](https://dshfind.com) — A DeepSeek Harness learning and sharing community featuring paper reviews, a plugin directory, and user rankings.
+
 ## License and attribution
 
 This repository is derived from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and preserves upstream notices. The project uses the BSD 3-Clause license; third-party dependencies and license terms are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
