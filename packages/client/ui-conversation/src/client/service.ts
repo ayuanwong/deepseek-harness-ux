@@ -336,12 +336,15 @@ function imageMediaType(value: string): ImageMediaType {
 }
 
 function bytesToBase64(data: Uint8Array): string {
-  let binary = ''
+  // Accumulate chunk strings and join once: `+=` on a growing string keeps
+  // reallocating the intermediate, quadratic in the byte count for a
+  // multi-MB attachment.
+  const binary: string[] = []
   const chunk = 0x8000
   for (let offset = 0; offset < data.length; offset += chunk) {
-    binary += String.fromCharCode(...data.subarray(offset, offset + chunk))
+    binary.push(String.fromCharCode(...data.subarray(offset, offset + chunk)))
   }
-  return btoa(binary)
+  return btoa(binary.join(''))
 }
 
 function revokePreview(url: string): void {
