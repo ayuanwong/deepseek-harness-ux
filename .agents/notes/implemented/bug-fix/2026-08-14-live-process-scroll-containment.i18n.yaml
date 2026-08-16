@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-08-14-live-process-scroll-containment.md
-2026-08-14-live-process-scroll-containment.md: de46f2e17ab457847dc75f2374e1270907c0fa80
-2026-08-14-live-process-scroll-containment.zh.md: cd3ffae9ef63199665a550f95a84610c43c1e176
+2026-08-14-live-process-scroll-containment.md: 9c7a17599bddb7396f15dd45c1912be7611905eb
+2026-08-14-live-process-scroll-containment.zh.md: ca7efe51f3a54907031f4d1d63375294d4860078

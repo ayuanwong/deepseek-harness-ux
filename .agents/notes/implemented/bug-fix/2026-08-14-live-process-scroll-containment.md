@@ -18,6 +18,14 @@ The conversation scrollport declares `overflow-anchor: none`. ChatView already o
 
 The composer remains sticky inside the authoritative conversation scrollport. Moving it to a separate fixed layer was rejected: it would change wheel-over-composer behavior, overlay takeovers, and the established single-scrollport contract while leaving the competing anchor writer unresolved.
 
+## Alternatives considered
+
+**Allow the bounded log to chain scrolling at its edges.** Rejected because one large wheel gesture would still move the transcript behind the process details, recreating the reported jump.
+
+**Keep native browser anchoring beside ChatView's anchor ledger.** Rejected because two independent position owners cannot provide a stable bottom-follow contract while live rows change height.
+
+**Move the composer into a separate fixed layer.** Rejected because it would change wheel-over-composer behavior, overlay takeovers, and the established single-scrollport contract without removing the competing transcript anchor.
+
 ## Consequences
 
 - Scrolling a long live technical log never changes the transcript position. To scroll the transcript, the pointer must be outside that bounded log.
