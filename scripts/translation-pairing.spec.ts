@@ -180,6 +180,16 @@ describe('translation pairing records', () => {
     expect(parseTranslationPairingRecord(renderTranslationPairingRecord(paths, record), paths)).toEqual(record)
   })
 
+  it('maps the Chinese-first root README to its English counterpart and shared record', () => {
+    const rootPaths = translationPairPaths('README.md')
+    expect(rootPaths).toEqual({
+      source: 'README.en.md',
+      zh: 'README.md',
+      meta: 'README.i18n.yaml',
+    })
+    expect(translationPairPaths('README.en.md')).toEqual(rootPaths)
+  })
+
   it('rejects duplicate or unexpected keys', () => {
     expect(parseTranslationPairingRecord([
       `foo.md: ${'1'.repeat(40)}`,
@@ -198,6 +208,7 @@ describe('translation pairing records', () => {
 describe('translation scope discovery', () => {
   it.each([
     'README.md',
+    'README.en.md',
     'CONTRIBUTING.md',
     'CONTRIBUTING.zh.md',
     'CONTRIBUTING.i18n.yaml',
@@ -268,6 +279,9 @@ describe('pair CLI arguments', () => {
     expect(pairAnchorOfArgument('docs/foo.i18n.yaml')).toBe('docs/foo.md')
     expect(pairAnchorOfArgument('docs/foo')).toBe('docs/foo.md')
     expect(pairAnchorOfArgument('.\\docs\\foo.zh.md')).toBe('docs/foo.md')
+    expect(pairAnchorOfArgument('README.md')).toBe('README.en.md')
+    expect(pairAnchorOfArgument('README.en.md')).toBe('README.en.md')
+    expect(pairAnchorOfArgument('README.i18n.yaml')).toBe('README.en.md')
   })
 
   it('scopes a check to named pairs and dedupes the three spellings', () => {

@@ -22,13 +22,26 @@ export interface TranslationPairingRecord {
 
 const META_LINE = /^([^:#]+\.md): ([0-9a-f]{40})$/
 
+/** Chinese GitHub landing page rendered automatically by the repository home. */
+export const ROOT_CHINESE_README = 'README.md'
+
+/** English counterpart of the Chinese-first GitHub landing page. */
+export const ROOT_ENGLISH_README = 'README.en.md'
+
 /**
- * Derive the counterpart and consistency-record paths from an English document.
+ * Derive the counterpart and consistency-record paths from either document in a pair.
  *
- * @param source - Repository-relative English Markdown path.
+ * @param source - Repository-relative English path, or the Chinese-first root `README.md` alias.
  * @returns The complete three-path pair.
  */
 export function translationPairPaths(source: string): TranslationPairPaths {
+  if (source === ROOT_CHINESE_README || source === ROOT_ENGLISH_README) {
+    return {
+      source: ROOT_ENGLISH_README,
+      zh: ROOT_CHINESE_README,
+      meta: 'README.i18n.yaml',
+    }
+  }
   if (!source.endsWith('.md') || source.endsWith('.zh.md')) {
     throw new Error(`expected an English Markdown path, received ${JSON.stringify(source)}`)
   }
@@ -46,6 +59,7 @@ export function translationPairPaths(source: string): TranslationPairPaths {
  * @returns The complete three-path pair.
  */
 export function translationPairPathsFromMeta(meta: string): TranslationPairPaths {
+  if (meta === 'README.i18n.yaml') return translationPairPaths(ROOT_ENGLISH_README)
   if (!meta.endsWith('.i18n.yaml')) {
     throw new Error(`expected a bilingual consistency-record path, received ${JSON.stringify(meta)}`)
   }

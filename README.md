@@ -1,76 +1,90 @@
 # DeepSeek Harness UX
 
-**[中文说明（推荐）](README.zh.md)** | English
+[English](README.en.md) | 中文
 
-**A calmer Web experience for long-running work in [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).**
+**让 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的长任务更容易看懂、更容易跟进。**
 
-DeepSeek Harness UX is an unofficial community source edition based on DeepSeek Harness. It keeps the upstream plugin architecture, Agent loop, model providers, tools, permissions, sandbox, and main-model request semantics, while concentrating its deliberate changes in the Web surfaces people watch and operate during long tasks.
+DeepSeek Harness UX 是一个非官方社区源码版本。它没有重写 Agent 的工作方式，而是重点改进网页里的任务过程、长回答、会话查找和文件入口。
 
-> This is not a DeepSeek distribution and does not receive upstream support. DeepSeek Harness and related names belong to their respective owners.
+> 本项目不是 DeepSeek 官方发行版，也不享有上游官方支持。DeepSeek Harness 及相关名称归其权利人所有。
 
-## Why this edition exists
+## 你会直接感受到什么
 
-Long-running Agent work produces valuable evidence, but presenting every event at equal visual weight makes three basic questions difficult to answer: Is it still working? What is it doing now? Is it finished?
+### 1. 会话进行时，思考和工具步骤不会一直刷屏
 
-This edition turns that event stream into a stable process surface, keeps technical evidence available on demand, returns reading focus to the answer after completion, and makes recent sessions and produced files easier to reach.
+任务运行时，思考、上下文、命令和工具调用会被收进一个稳定的“过程”区域。你可以直接看到当前做到哪一步、已经运行多久，不必在大量技术消息里寻找进度。
 
-## Complete functional differences from official DeepSeek Harness
+如果启用展示辅助，界面还会用一次很小的模型请求，把 Todo、思考和工具证据整理成更容易理解的阶段名称。这个请求只负责显示，不会改变 Agent 的回答。
 
-The comparison below covers every intentionally maintained, user-visible difference in this fork. It does not count generated files, tests, package metadata, repository-only tooling, or mechanical source-tree drift as product features.
+### 2. 任务完成后，过程自动折叠，答案回到主视线
 
-Comparison snapshots:
+正常完成的任务会自动收起思考过程，让最终答案留在最显眼的位置。遇到失败或中断时，过程会继续展开，方便检查问题。
 
-- **DeepSeek Harness UX:** functional source at [`35c6172`](https://github.com/ayuanwong/deepseek-harness-ux/commit/35c61722573f1357f0b5b7e2f687094fb6f7b097), based on the 2026-08-12 upstream source snapshot.
-- **Official DeepSeek Harness:** [`47f9438`](https://github.com/deepseek-ai/deepseek-harness/commit/47f943859bef60e4160492346772ded9b24f765a), the `master` head used for this review on 2026-08-17.
+**任务完成后，过程会自动收起：**
 
-| Area | Official DeepSeek Harness at the comparison snapshot | DeepSeek Harness UX | Nature of the difference |
-|---|---|---|---|
-| Agent execution | Official Agent loop, model routes, tools, permission policy, sandbox, and session log | The same execution model is retained; Web presentation does not redefine Agent strategy | Intentionally unchanged |
-| Running-turn presentation | Reasoning, context, Tool rows, and intermediate narration are presented as ordinary conversation events | One stable process panel groups the Turn, keeps the current stage visible, and exposes step count and elapsed time | UX addition |
-| Stage labels | Uses the authored event presentation | A bounded, optional presentation-only model call may refine Todo, reasoning, and Tool evidence into a forward-only stage trail | UX addition; extra bounded model usage |
-| Technical evidence | Event and Tool rows remain directly in the conversation flow | Raw reasoning, context, commands, and Tool rows remain inspectable under **Run details** | UX restructuring, no evidence deletion |
-| Live-detail scrolling | Native nested scrolling can hand wheel movement back to the transcript | The bounded live detail log owns its scroll gesture; the transcript disables competing native anchoring so the sticky composer does not jump into blank space | UX bug fix |
-| Turn completion and failure | Conversation history remains in its ordinary event layout | A successful process folds when work becomes idle; terminal or unrecovered failure stays expanded, while recovered intermediate errors stay in details | UX addition |
-| Answer headings | Shows the model-authored Markdown headings | A second bounded presentation-only call may refine headings for the finalized closing answer; the authored Markdown remains the copy, history, and model source | UX addition; extra bounded model usage |
-| Conversation reading | Standard Markdown spacing and message controls | Tighter mixed-format answer rhythm, clearer Turn separation, and Copy, feedback, and Branch actions shown on hover or keyboard focus | Visual and interaction change |
-| Idle-edge history repair | Follows the ordinary history and live-event lanes | When a resident Session changes from running to idle, the browser refreshes only the overlapping history tail in the background, repairing a delayed `turn/end` without flashing the loader or dropping older pages | Recovery improvement |
-| Session ordering | Manual ordering is the persisted default; Last updated is optional | **Last updated** becomes the one-time migrated default, while Manual remains available | Default change |
-| Ungrouped Session creation | New Session inherits or targets a Workspace path | The Ungrouped group has its own create action that explicitly creates or reuses a blank Session without inheriting a Workspace | UX addition |
-| Sidebar content search | Full-text Session search ships opt-in and is disabled in the default bundle; title and Workspace matching remain available | The base bundle opens an in-memory SQLite index on first search, so conversation-content results are available by default for the current process | Capability/default difference |
-| Cold Session rows | Small cold artifacts receive bounded blankness and last-human-prompt verification, avoiding stale empty rows and pickup-time recency | This snapshot predates that upstream verification and retains the earlier cold-list behavior | Upstream fix not included |
-| Produced files | The finished-turn row is driven by successful mutation-tool locations | It also recognizes exact, intentionally declared common artifact paths in the closing answer, including documents, datasets, images, media, archives, databases, and 3D/CAD files; arbitrary prose, URLs, commands, and fenced examples remain excluded | UX addition |
-| First-run model setup | The reviewed upstream snapshot has a versioned internal-testing notice followed by an inline conditional DeepSeek credential dialog | This snapshot omits the internal-testing notice and routes the conditional DeepSeek step to the full **Settings → Models** setup card, avoiding a second secret editor | Deliberate simplification |
-| OAuth-only catalog providers | Providers that this build cannot authenticate, such as the installed `openai-codex` OAuth-only route, are withheld from the add-provider picker | This snapshot can still offer that route even though it has no built-in OAuth login or durable refresh flow; a manually supplied token is required | Known snapshot limitation |
-| Codex and Claude Code subagent providers | Excluded from the default production bundle and installed only by Profiles that explicitly opt in | Both dormant providers are dependencies of the base bundle; loading them starts no product process, but the packages are installed | Composition/default difference |
-| Frame-wide extension surfaces | Provides `shell.overlay` and `sidebar.footer.action`; the official Cordis UI uses them for global controls | This snapshot predates those seats and the global Cordis UI | Upstream capability not included |
-| Distribution | Official public npm packages; the Web UI can start with `npx @deepseek-ai/dsh web` | Source checkout only; this repository publishes nothing under the `@deepseek-ai` scope | Distribution difference |
-| License of the compared trees | Current upstream tree uses MIT | This fork retains the BSD 3-Clause license of its source snapshot and preserves upstream notices | Snapshot/legal difference |
+![任务完成后，运行过程自动折叠](assets/readme-process-collapsed.png)
 
-## Current upstream capabilities not included here
+**需要检查时，点一下就能重新展开：**
 
-Because this repository is a source snapshot rather than a continuously rebased patch, it does not automatically include later upstream work. The known user-facing deltas found in the reviewed trees are called out in the table, including onboarding, search defaults, cold Session handling, provider availability, extension seats, distribution, and licensing. Later upstream maintenance, compatibility, packaging, and security fixes are not automatically merged. Choose upstream when staying current with official releases matters more than the UX changes listed here.
+![重新展开运行过程，查看思考与上下文细节](assets/readme-process-expanded.png)
 
-## Display assistance does not change the answer
+### 3. 长日志可以单独滚动，不会带着整个对话乱跳
 
-The optional presentation service reads a bounded slice of already-recorded process evidence and returns display metadata only. It does **not** modify the main model's System Prompt, user message, tools, reasoning, authored answer, or conversation history.
+展开“运行详情”后，长命令输出和工具日志会在自己的区域里滚动。滚到边缘时不会突然把整个对话带走，底部输入框也不会把页面顶出一大片空白。
 
-Presentation calls may add a small amount of token use and latency. Failure, timeout, an unavailable route, or invalid output never blocks the Agent; the browser keeps the authored heading or a safe local stage label. See [Web presentation](packages/web/web-presentation/README.md) and its [design record](.agents/notes/implemented/feature/2026-08-13-web-turn-process-presentation.md).
+### 4. 长回答更适合阅读
 
-## Which version should I choose?
+回答的段落、标题和不同轮次之间更紧凑。任务结束后，可选的展示辅助还能优化答案标题；复制内容、会话历史和模型看到的原始答案都不会被改写。
 
-Choose the [official DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) when you want the newest supported source, npm distribution, current official extension surfaces, or primarily use headless and CLI workflows.
+任务刚结束时，网页会在后台补齐最后一段历史，避免晚到的结束事件让界面看起来还在运行，也不会闪出新的加载页。
 
-Choose DeepSeek Harness UX when the Web UI is your main workspace and you value a compact live-process surface, stable long-log scrolling, recent-session defaults, and broader produced-file discovery enough to accept a snapshot-based community edition.
+### 5. 以前的会话更容易找
+
+会话默认按最近更新时间排列，也可以切回手动排序。侧边栏可以搜索标题、工作区名称和当前进程中的对话内容；“未分组”区域也能直接新建不属于任何工作区的会话。
+
+### 6. 生成的文件更容易找到
+
+除了工具明确写出的文件，UX 版还会识别答案里清楚列出的文档、表格、数据集、图片、音视频、压缩包、数据库和 3D/CAD 文件路径，把它们显示成可打开的产物入口。普通文字、网址、命令和示例代码不会被误当成文件。
+
+### 7. 模型配置集中在设置页
+
+首次使用时会直接进入“设置 → 模型”的完整配置卡，不再维护另一套简化的密钥弹窗。提供方、模型、API Key 和错误恢复都在同一个地方完成。
+
+## 它没有改变什么
+
+- Agent Loop、模型路由、工具、权限、沙箱和 Session Log 仍沿用 DeepSeek Harness 的执行方式。
+- 原始思考、上下文、命令和工具证据没有被删除，只是收进“运行详情”。
+- 展示辅助不会修改 System Prompt、用户消息、工具、原始回答或会话历史。
+- Session Log 默认仍保存在本地。
+
+## 和官方版本相比，还需要知道这些
+
+- 这是基于上游源码快照维护的社区版本，不会自动获得官方后续的修复、兼容性更新和安全更新。
+- 这个快照还没有官方后来加入的部分能力，例如更严格的冷会话校验、隐藏当前无法登录的 OAuth-only 提供方，以及新的全局界面扩展位。
+- 当前没有内建的 Codex OAuth 登录和 Token 自动刷新；选择 `openai-codex` 路由时需要手动提供 Token。
+- 基础 Bundle 会安装休眠状态的 Codex 和 Claude Code 子代理提供方，但不会因此自动启动对应产品进程。
+- 官方版提供 npm 包；这个仓库只提供源码运行，不会向 `@deepseek-ai` scope 发布包。
+- 当前官方源码使用 MIT 许可证；这个分支保留其上游快照当时采用的 BSD 3-Clause 许可证和相关声明。
+
+## 应该选哪个版本？
+
+如果你主要在网页里运行长任务，希望过程更清楚、回答更好读、会话和文件更容易找到，可以选择 DeepSeek Harness UX。
+
+如果你更在意最新官方更新、npm 安装、Headless 或 CLI 工作流，应优先选择[官方 DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)。
+
+## 对比依据
+
+UX 功能源码基于 [`35c6172`](https://github.com/ayuanwong/deepseek-harness-ux/commit/35c61722573f1357f0b5b7e2f687094fb6f7b097)。本说明以 2026-08-17 的官方 [`47f9438`](https://github.com/deepseek-ai/deepseek-harness/commit/47f943859bef60e4160492346772ded9b24f765a) 为对照，只把用户能直接感知的差异写成功能，不把测试、包元数据和机械性源码差异包装成产品能力。
 
 <a id="run"></a><a id="run-from-source"></a>
 
-## Run from source
+## 从源码运行
 
-Requirements:
+环境要求：
 
-- Node.js `^22.19` or `>=24`
+- Node.js `^22.19` 或 `>=24`
 - pnpm 11
-- A DeepSeek-compatible API key
+- 兼容 DeepSeek 的 API Key
 
 ```sh
 git clone https://github.com/ayuanwong/deepseek-harness-ux.git
@@ -80,17 +94,17 @@ pnpm run build
 pnpm run dsh -- web --port 3081
 ```
 
-Open `http://127.0.0.1:3081`, add a model provider under **Settings → Models**, then create a Session. Replace `3081` if the port is already in use.
+打开 `http://127.0.0.1:3081`，在“设置 → 模型”中添加模型提供方，然后新建会话。如果 3081 已被占用，可以换成其他端口。
 
-This repository is a complete source edition. It is not a drop-in Fabric patch or a separately published npm plugin for a clean upstream checkout.
+本仓库交付的是完整源码版本，不是能直接安装到干净上游仓库的补丁，也没有单独发布为 npm 插件。
 
-## Privacy
+## 隐私
 
-Session logs stay local by default. Do not commit `.env`, `.npmrc`, API keys, local Sessions, build output, or profile data. Review upstream telemetry settings before enabling a non-default telemetry mode. Presentation requests use the Session's configured provider and model, so their bounded evidence projection is sent to that provider when the optional refinement runs.
+不要提交 `.env`、`.npmrc`、API Key、本地 Session、构建产物或 profile 数据。启用任何非默认遥测模式前，请先阅读上游遥测设置。展示辅助使用当前 Session 配置的模型提供方，因此启用阶段或标题整理时，会把受限的运行证据发送给该提供方。
 
-## Development
+## 开发
 
-Read [AGENTS.md](AGENTS.md), the [development guide](docs/development.md), and [architecture](docs/architecture.md) before changing packages.
+修改包之前，请阅读 [AGENTS.md](AGENTS.md)、[开发指南](docs/development.md)和[架构文档](docs/architecture.md)。
 
 ```sh
 pnpm run lint
@@ -99,14 +113,12 @@ pnpm run hygiene
 pnpm run doc-sync
 ```
 
-## Community links
+## 友情链接
 
-| Project | Description |
-|---|---|
-| [![dshfind](https://dshfind.com/api/badge/huiliyi37/dsh-tianshu-tui?lang=zh)](https://dshfind.com/zh/plugins/huiliyi37/dsh-tianshu-tui?ref=badge) | Interactive terminal UI plugin with TDD, evidence gates, vision, and code-intelligence workflows. |
-| [![dshfind](https://dshfind.com/api/badge/ccch1mneyyy/dsh-TUI?lang=zh)](https://dshfind.com/zh/plugins/ccch1mneyyy/dsh-TUI?ref=badge) | Claude Code-style full-screen terminal UI with live task status, streamed reasoning, rollback, and context/TPS metrics. |
-| [![dshfind](https://dshfind.com/api/badge/0xsline/awesome-deepseek-harness?lang=zh)](https://dshfind.com/zh/plugins/0xsline/awesome-deepseek-harness?ref=badge) | Curated DeepSeek Harness resources and ecosystem projects on DSH Find. |
+- [![dshfind](https://dshfind.com/api/badge/huiliyi37/dsh-tianshu-tui?lang=zh)](https://dshfind.com/zh/plugins/huiliyi37/dsh-tianshu-tui?ref=badge) — 带 TDD、证据检查、视觉和代码智能工作流的交互式终端 UI。
+- [![dshfind](https://dshfind.com/api/badge/ccch1mneyyy/dsh-TUI?lang=zh)](https://dshfind.com/zh/plugins/ccch1mneyyy/dsh-TUI?ref=badge) — Claude Code 风格的全屏终端 UI，支持实时任务状态、流式思考、回滚和上下文指标。
+- [![dshfind](https://dshfind.com/api/badge/0xsline/awesome-deepseek-harness?lang=zh)](https://dshfind.com/zh/plugins/0xsline/awesome-deepseek-harness?ref=badge) — DSH Find 上整理的 DeepSeek Harness 资源与生态项目。
 
-## License and attribution
+## 许可证与归属
 
-This repository is derived from [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) and preserves the notices of its source snapshot. This tree uses the [BSD 3-Clause license](LICENSE); third-party dependencies and license terms are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+本仓库派生自 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)，并保留其源码快照中的上游声明。本源码树使用 [BSD 3-Clause 许可证](LICENSE)；第三方依赖及许可条款见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

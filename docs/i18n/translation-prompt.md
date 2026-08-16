@@ -20,7 +20,7 @@
 
 流水线使用**整篇文档**的中英对照作为 few-shot，不是模板内嵌的句子级正误例。以下 5 组配对文档均经过人工评审，以仓库当前版本为准、随仓库更新：
 
-- `README.md` ↔ `README.zh.md`
+- `README.en.md` ↔ `README.md`
 - `docs/development.md` ↔ `docs/development.zh.md`
 - `docs/i18n/README.md` ↔ `docs/i18n/README.zh.md`
 - `docs/i18n/translation-rules.md` ↔ `docs/i18n/translation-rules.zh.md`

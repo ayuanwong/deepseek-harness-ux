@@ -10,10 +10,10 @@ Status: implemented
 
 ## 决策
 
-- **配对兄弟文件，两种语言同权。** 一对文档由三个兄弟文件组成：英文 `foo.md`、中文 `foo.zh.md`，以及一份一致性记录 `foo.i18n.yaml`。没有哪种语言是正典：一篇文档可以先用中文撰写和评审、之后再译成英文，反之亦可；约束配对的是：两侧必须表达相同的内容，且配对整体合并（两种语言加记录，绝不单独落一侧）。政策见 [docs/i18n/README.md](../../../../docs/i18n/README.md)；翻译规则见 [docs/i18n/translation-rules.md](../../../../docs/i18n/translation-rules.md)；术语真源见 [docs/i18n/terminology.md](../../../../docs/i18n/terminology.md)。
+- **配对兄弟文件，两种语言同权。** 一对文档由三个兄弟文件组成：英文 `foo.md`、中文 `foo.zh.md`，以及一份一致性记录 `foo.i18n.yaml`。GitHub 首页配对使用中文 `README.md`、英文 `README.en.md` 和同一份 `README.i18n.yaml`，让仓库首页默认显示中文，同时不弱化配对门禁。没有哪种语言是正典：一篇文档可以先用中文撰写和评审、之后再译成英文，反之亦可；约束配对的是：两侧必须表达相同的内容，且配对整体合并（两种语言加记录，绝不单独落一侧）。政策见 [docs/i18n/README.md](../../../../docs/i18n/README.md)；翻译规则见 [docs/i18n/translation-rules.md](../../../../docs/i18n/translation-rules.md)；术语真源见 [docs/i18n/terminology.md](../../../../docs/i18n/terminology.md)。
 - **伴随记录保存两侧 blob hash，使一致性可检查。** `foo.i18n.yaml` 保存两侧文件在上一次确认一致时各自的完整 Git blob hash。此后修改了任一侧而未重新确认配对，都能被机械检测出来（纯内容比较，无需查询历史），而且同一个 PR（Pull Request）内改动的文件也能计算出 hash，commit hash 式的记录做不到这一点。重新记录（`verify-translation-pairing --write <pair>`，要求点名所确认的配对；批量重新记录是显式的 `--write --all`）会产生一份可评审的 YAML diff：确认一致在 PR 中是一个显式、可见的动作。
 - **`verify-translation-pairing` 加入 `doc-sync`。** 门禁（[scripts/verify-translation-pairing.ts](../../../../scripts/verify-translation-pairing.ts)）强制执行以下规则：每个已发现且未排除的源文档都有完整配对；每个现有配对都完整（三个文件齐全）且一致（两侧的 hash 均与记录匹配、中文侧和所有人工撰写的英文源都带语言切换行而清单内的生成英文源除外、结构签名一致）；被排除的生成文档、指令文档或本身即双语的文档不得配对。[scripts/translation-pairing.manifest.json](../../../../scripts/translation-pairing.manifest.json) 只包含显式排除项，因此任何要求都无法绕过发现流程而接受较弱的检查。只有当 `.zh.md` 围栏序列与其无后缀兄弟文件拥有顺序相同、正文按字节一致的同一组受跟踪围栏时，面向源码的代码门禁才会将其作为派生内容消费；不完整、顺序变更、重分类或已改动的序列仍会独立受检，因此由其所属的代码门禁或配对门禁报告不匹配。
-- **全语料统一要求。** 范围内的每篇文档从创建起就必须有完整配对；政策没有逐文件推进状态、日期分界或 README 专用类别。README 发现会覆盖 vendor 源码、依赖目录与被忽略的构建产物目录之外所有文件名不区分大小写匹配 README 的文件，包括今后新增的顶层目录。发布到文档站的配对使用 `pairedPages()`，由根 locale 投影 `.zh.md`，由 `/en/` 投影 `.md`；仅创建对侧文件并不会发布它。
+- **全语料统一要求。** 范围内的每篇文档从创建起就必须有完整配对；政策没有逐文件推进状态或日期分界。README 发现会覆盖 vendor 源码、依赖目录与被忽略的构建产物目录之外所有文件名不区分大小写匹配 README 的文件（包括今后新增的顶层目录），并额外覆盖根目录的 `README.en.md` 对侧文件。中文优先的首页文件名是受检查的映射，不是排除项。发布到文档站的配对使用 `pairedPages()`，由根 locale 投影 `.zh.md`，由 `/en/` 投影 `.md`；仅创建对侧文件并不会发布它。
 - **配对记录是元数据，而不是 Cordis Loader 配置。** Cordis 配置发现会接受实际的 `.cordis.yml` 和 `.cordis.yaml` 文件，同时排除 `*.i18n.yaml`，即使文档名中包含 `cordis` 也不例外。这样既能继续校验可执行的 Loader 配置项，又不会把翻译 hash 当作配置来解析。
 - **翻译是 agent 的工作，由人评审。** 常规改动采用由[轻量翻译决策](2026-08-08-lightweight-routine-documentation-translation.md)确立的直接单遍路径。[扩展翻译 skill（技能）](../../../skills/dsh-translate-docs/SKILL.md)保留委派翻译和其他较重机制，供用户显式调用；两条路径均以文档契约为真源。
 
@@ -27,6 +27,7 @@ Status: implemented
 - **语言目录（`docs/en/` + `docs/zh/`，Kubernetes/ECharts 模式）**：否决。本仓库没有将 locale 映射到路由的文档站框架；如果移动所有英文文件，所有既有交叉引用都要随之修改；且 `verify-md-links`/`verify-doc-refs` 将需要路径映射逻辑，而非原样工作。
 - **独立翻译仓库（PingCAP `docs`/`docs-cn` 模式）**：否决。适合有独立发布节奏的文档产品，对 monorepo 自身的文档而言过重；还会把译文置于本仓库门禁触及不到的地方。
 - **中英混排单文件（一个文件、两种语言）**：否决。每个 diff 都翻倍，破坏一段一行约定的 diff 易读性，且局部不一致不可见。
+- **GitHub 首页继续显示英文，只提供中文链接**：否决。GitHub 始终在仓库首页渲染 `README.md`，因此即使标注「推荐中文」，用户的第一眼仍然是英文。显式的 `README.md`／`README.en.md` 映射让首页默认显示中文，同时保留彼此分离且受门禁校验的双语文件。
 - **Commit hash 式记录（MDN `l10n.sourceCommit` 模式）**：否决，改用 blob hash。同一个 PR 内的改动还没有 commit hash，MDN 模式无法表达「与本 PR 引入的状态一致」，且校验它需要 git 历史而非文件内容。
 - **比较配对两侧的 git 时间戳（无记录）**：否决。纯格式化的改动会误报，一次无关改动之后提交的对侧文件会漏报；只有内容同一性这个信号才与门禁的承诺名实相符。
 
@@ -42,3 +43,4 @@ Status: implemented
 - 生成的英文文档仍由源码派生，并由各自的生成器实施新鲜度门禁。有经评审中文对侧的生成页面遵循三文件配对工作流，但有一项结构例外：生成的英文源文件不含语言切换行，因为添加该行会使生成器新鲜度检查失败；中文对侧仍链接回英文源。没有经评审对侧的生成页面保留为显式排除项，并在网站上投影英文。
 - 只含排除项的 manifest（元数据清单）通过同一路径，要求当前及今后纳入范围的每篇文档都必须配对。不存在显式要求、分界或类别条目可以落在发现范围之外，却看似已经强制执行。
 - 记录的 hash 兼作更新工具：[gen-translation-brief](2026-07-26-briefed-minimal-translation-updates.md) 会从中还原任一侧上次确认的文本并组装最小更新简报，因此这套机制从不强迫整篇重译。
+- 根 README 是唯一的中文优先文件名映射；翻译工具在检查、生成简报或合并前，会把任一首页文件及其伴随记录解析到同一对中英文件。

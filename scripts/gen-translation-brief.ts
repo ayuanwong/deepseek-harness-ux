@@ -24,6 +24,7 @@ import {
   translationStructureDiff,
   translationStructureSignature,
 } from './translation-pairing.ts'
+import { translationPairPaths, translationPairPathsFromMeta } from './translation-pairing-record.ts'
 import {
   changedSpanIndices,
   computeMechanicalUpdate,
@@ -100,8 +101,9 @@ interface PairState {
 
 /** Load one pair's recorded and current state, or explain why it cannot be briefed. */
 function loadPair(anchor: string): PairState | string {
-  const zh = anchor.replace(/\.md$/, '.zh.md')
-  const meta = anchor.replace(/\.md$/, '.i18n.yaml')
+  const paths = translationPairPaths(anchor)
+  const zh = paths.zh
+  const meta = paths.meta
   if (!isTranslationScopeFile(anchor) || isExcluded(anchor)) {
     return `${anchor}: not an in-scope documentation pair (docs/i18n/README.md)`
   }
@@ -214,10 +216,9 @@ function planScope(
 
 /** Validate a computed mechanical counterpart and write it. */
 function applyMechanical(counterpartPath: string, sourceCurrent: string, result: string): void {
+  const paths = translationPairPaths(counterpartPath)
   const counterpartBase = basename(counterpartPath)
-  const sourceBase = counterpartBase.endsWith('.zh.md')
-    ? counterpartBase.replace(/\.zh\.md$/, '.md')
-    : counterpartBase.replace(/\.md$/, '.zh.md')
+  const sourceBase = counterpartPath === paths.zh ? basename(paths.source) : basename(paths.zh)
   const errors = translationStructureDiff(
     translationStructureSignature(parseTranslationMarkdown(sourceCurrent), counterpartBase),
     translationStructureSignature(parseTranslationMarkdown(result), sourceBase),
@@ -269,7 +270,7 @@ if (requested.length > 0) {
   const discovered = new Set<string>()
   for (const match of globSync('**/*.i18n.yaml', { cwd: root, exclude: TRANSLATION_SCOPE_GLOB_EXCLUDES })) {
     const normalized = match.split(sep).join('/')
-    if (isTranslationScopeFile(normalized)) discovered.add(normalized.replace(/\.i18n\.yaml$/, '.md'))
+    if (isTranslationScopeFile(normalized)) discovered.add(translationPairPathsFromMeta(normalized).source)
   }
   anchors = [...discovered].sort()
 }
