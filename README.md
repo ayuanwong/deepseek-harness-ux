@@ -115,9 +115,9 @@ pnpm run doc-sync
 
 ## 友情链接
 
-- [![dshfind](https://dshfind.com/api/badge/huiliyi37/dsh-tianshu-tui?lang=zh)](https://dshfind.com/zh/plugins/huiliyi37/dsh-tianshu-tui?ref=badge) — 带 TDD、证据检查、视觉和代码智能工作流的交互式终端 UI。
-- [![dshfind](https://dshfind.com/api/badge/ccch1mneyyy/dsh-TUI?lang=zh)](https://dshfind.com/zh/plugins/ccch1mneyyy/dsh-TUI?ref=badge) — Claude Code 风格的全屏终端 UI，支持实时任务状态、流式思考、回滚和上下文指标。
-- [![dshfind](https://dshfind.com/api/badge/0xsline/awesome-deepseek-harness?lang=zh)](https://dshfind.com/zh/plugins/0xsline/awesome-deepseek-harness?ref=badge) — DSH Find 上整理的 DeepSeek Harness 资源与生态项目。
+- [![dshfind](https://dshfind.com/api/badge/huiliyi37/dsh-tianshu-tui?lang=zh)](https://github.com/huiliyi37/dsh-tianshu-tui) — 带 TDD、证据检查、视觉和代码智能工作流的交互式终端 UI。
+- [![dshfind](https://dshfind.com/api/badge/ccch1mneyyy/dsh-TUI?lang=zh)](https://github.com/ccch1mneyyy/dsh-TUI) — Claude Code 风格的全屏终端 UI，支持实时任务状态、流式思考、回滚和上下文指标。
+- [![dshfind](https://dshfind.com/api/badge/0xsline/awesome-deepseek-harness?lang=zh)](https://dshfind.com) — DSH Find 上整理的 DeepSeek Harness 资源与生态项目。
 
 ## 许可证与归属
 

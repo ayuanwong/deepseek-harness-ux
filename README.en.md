@@ -115,9 +115,9 @@ pnpm run doc-sync
 
 ## Community links
 
-- [![dshfind](https://dshfind.com/api/badge/huiliyi37/dsh-tianshu-tui?lang=zh)](https://dshfind.com/zh/plugins/huiliyi37/dsh-tianshu-tui?ref=badge) — Interactive terminal UI with TDD, evidence checks, vision, and code-intelligence workflows.
-- [![dshfind](https://dshfind.com/api/badge/ccch1mneyyy/dsh-TUI?lang=zh)](https://dshfind.com/zh/plugins/ccch1mneyyy/dsh-TUI?ref=badge) — Claude Code-style full-screen terminal UI with live task status, streamed reasoning, rollback, and context metrics.
-- [![dshfind](https://dshfind.com/api/badge/0xsline/awesome-deepseek-harness?lang=zh)](https://dshfind.com/zh/plugins/0xsline/awesome-deepseek-harness?ref=badge) — Curated DeepSeek Harness resources and ecosystem projects on DSH Find.
+- [![dshfind](https://dshfind.com/api/badge/huiliyi37/dsh-tianshu-tui?lang=zh)](https://github.com/huiliyi37/dsh-tianshu-tui) — Interactive terminal UI with TDD, evidence checks, vision, and code-intelligence workflows.
+- [![dshfind](https://dshfind.com/api/badge/ccch1mneyyy/dsh-TUI?lang=zh)](https://github.com/ccch1mneyyy/dsh-TUI) — Claude Code-style full-screen terminal UI with live task status, streamed reasoning, rollback, and context metrics.
+- [![dshfind](https://dshfind.com/api/badge/0xsline/awesome-deepseek-harness?lang=zh)](https://dshfind.com) — Curated DeepSeek Harness resources and ecosystem projects on DSH Find.
 
 ## License and attribution
 
